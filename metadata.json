@@ -1,0 +1,8 @@
+{
+  "name": "Helper Client - Futuristic Home Services",
+  "description": "A futuristic, premium home services booking application with real-time dashboard, service catalog, and smart pricing engine.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}

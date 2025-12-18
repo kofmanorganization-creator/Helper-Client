@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth.token.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // App Check: Désactivé car supprimé côté client
+    function isVerifiedApp() {
+      return true;
+    }
+
+    // Users root: user can only read/write their doc; admins via custom claim
+    match /users/{userId} {
+      allow read: if request.auth != null && (isOwner(userId) || isAdmin());
+      allow create: if request.auth != null && isOwner(userId) 
+                      && request.resource.data.keys().hasAll(['uid', 'firstName', 'lastName', 'phone', 'photoUrl', 'role', 'createdAt', 'onboardingDone']);
+      allow update, delete: if request.auth != null && (isOwner(userId) || isAdmin());
+
+      match /settings/{doc} {
+        allow read, write: if request.auth != null && isOwner(userId);
+      }
+      match /payment_methods/{pm} {
+        allow read, write, delete: if request.auth != null && isOwner(userId);
+      }
+      match /sessions/{sid} {
+        allow read, delete: if request.auth != null && isOwner(userId);
+      }
+      match /wallet/{w} {
+        allow read: if request.auth != null && isOwner(userId);
+        allow write: if false; 
+      }
+    }
+    
+    match /service_categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.clientId;
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.providerId ||
+        isAdmin()
+      );
+      allow update: if false; 
+    }
+
+    match /support_tickets/{ticketId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+    }
+    
+    match /otp_logs/{logId} {
+        allow read: if isAdmin();
+        allow create: if false;
+        allow update, delete: if false;
+    }
+    
+    match /chats/{chatId} {
+      function isParticipant() {
+      	return request.auth.uid in resource.data.participants;
+      }
+      
+      allow read, update: if request.auth != null && isParticipant();
+      allow create, delete: if false;
+
+      match /messages/{messageId} {
+        function isChatParticipant() {
+        	return request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        }
+        
+        allow read: if request.auth != null && isChatParticipant();
+        allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid && isChatParticipant();
+        allow update, delete: if false;
+      }
+    }
+
+    match /app_settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /app_settings/help/faq/{doc} {
+       allow read: if true;
+       allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
