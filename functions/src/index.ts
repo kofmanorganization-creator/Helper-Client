@@ -1,4 +1,3 @@
-
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 
@@ -17,13 +16,13 @@ export {
     createSupportTicket, 
     addPaymentMethod, 
     paymentWebhook,
-    createMission, // Unified naming
+    createMission,
     acceptBooking,
     completeRegistration,
     generateWelcomeMessage
 };
 
-// Aliases for backward compatibility during transition
+// Alias pour la compatibilité avec l'ancien code client si nécessaire
 export const createBooking = createMission;
 
 export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) => {
@@ -54,6 +53,5 @@ export const onMissionCreated = functions.firestore
   .onCreate(async (snap, context) => {
     const mission = snap.data();
     if (mission.status !== 'searching') return;
-    console.log(`[Matching] Mission ${context.params.missionId} created. Triggering provider search...`);
-    // Future: Call matchProvidersByRadius here
+    console.log(`[Matching] Mission ${context.params.missionId} active. Démarrage de la recherche prestataire...`);
   });

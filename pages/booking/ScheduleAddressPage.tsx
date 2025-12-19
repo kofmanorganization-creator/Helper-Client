@@ -52,7 +52,7 @@ const ScheduleAddressPage: React.FC<ScheduleAddressPageProps> = ({ address, onAd
 
     setIsLocating(true);
 
-    // FIX: Optimized geolocation settings to prevent Timeout (Code 3)
+    // SOLUTION NUCLÉAIRE GPS : enableHighAccuracy est souvent la cause du timeout (Code 3)
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -66,7 +66,7 @@ const ScheduleAddressPage: React.FC<ScheduleAddressPageProps> = ({ address, onAd
       (error) => {
         let errorMessage = "Impossible de récupérer votre position.";
         if (error.code === 3) {
-            errorMessage = "Délai d'attente GPS dépassé. Veuillez réessayer ou saisir votre adresse manuellement.";
+            errorMessage = "Délai d'attente GPS dépassé. Veuillez saisir manuellement votre quartier.";
         } else if (error.code === 1) {
             errorMessage = "Accès GPS refusé. Veuillez l'autoriser dans vos paramètres.";
         }
@@ -75,9 +75,9 @@ const ScheduleAddressPage: React.FC<ScheduleAddressPageProps> = ({ address, onAd
         setIsLocating(false);
       },
       { 
-        enableHighAccuracy: false, // High accuracy is often the cause of timeouts indoors
-        timeout: 20000,           // Increased to 20 seconds
-        maximumAge: 60000         // Allow using a cached position up to 1 minute old
+        enableHighAccuracy: false, // Plus fiable et rapide que true en ville/intérieur
+        timeout: 25000,           // 25 secondes
+        maximumAge: 60000         // Accepte une position en cache de 1 min
       }
     );
   };
