@@ -1,10 +1,8 @@
 
-
 import { ServiceCategory, ServicePricing, User } from './types';
 
-export const COMMISSION_RATE = 0.25; // 25%
+export const COMMISSION_RATE = 0.25;
 
-// FIX: Added MOCK_USER which was missing and causing an error in a legacy component.
 export const MOCK_USER: User = {
   uid: 'user_123',
   firstName: 'Alex',
@@ -15,13 +13,10 @@ export const MOCK_USER: User = {
 };
 
 export const SERVICES_CATEGORIES: ServiceCategory[] = [
-  // Top 4 (Home Display)
   { id: 'cat_apart', name: 'Appartement', description: 'Nettoyage complet', icon: '🏢' },
   { id: 'cat_villa', name: 'Villa', description: 'Nettoyage surface', icon: '🏡' },
   { id: 'cat_bureau', name: 'Bureau', description: 'Entretien pro', icon: '💼' },
-  { id: 'cat_gaz', name: 'Gaz', description: 'Recharge express', icon: '🔥' }, // Promoted to top 4 for utility
-  
-  // Plus de services
+  { id: 'cat_gaz', name: 'Gaz', description: 'Recharge express', icon: '🔥' },
   { id: 'cat_cours', name: 'Soutien Scolaire', description: 'Du CP au Lycée', icon: '🎓' },
   { id: 'cat_plomberie', name: 'Plomberie', description: 'Fuites & Install', icon: '🚰' },
   { id: 'cat_elec', name: 'Électricité', description: 'Pannes & Travaux', icon: '⚡' },
@@ -33,7 +28,6 @@ export const SERVICES_CATEGORIES: ServiceCategory[] = [
 ];
 
 export const SERVICES_PRICING_RULES: ServicePricing[] = [
-  // --- EXISTING ---
   {
     serviceCategoryId: 'cat_apart',
     rules: {
@@ -84,9 +78,6 @@ export const SERVICES_PRICING_RULES: ServicePricing[] = [
       ],
     },
   },
-
-  // --- NEW SERVICES ---
-
   {
     serviceCategoryId: 'cat_gaz',
     rules: {

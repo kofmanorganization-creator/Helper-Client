@@ -27,7 +27,7 @@ export const subscribeToUserBookings = (callback: (bookings: Booking[]) => void)
     });
     callback(bookings);
   }, (error) => {
-    console.error("Error fetching bookings:", error);
+    console.error("[BookingService] Error fetching bookings:", error);
     callback([]);
   });
 
@@ -47,7 +47,7 @@ export const subscribeToSingleBooking = (bookingId: string, callback: (booking: 
       callback(null);
     }
   }, (error) => {
-    console.error(`Error fetching booking ${bookingId}:`, error);
+    console.error(`[BookingService] Error fetching booking ${bookingId}:`, error);
     callback(null);
   });
 
@@ -63,6 +63,7 @@ export const createBooking = async (state: BookingState, paymentMethod: PaymentM
 
     const createBookingFn = httpsCallable(functions, 'createBooking');
 
+    // Build payload carefully
     const payload = {
         serviceCategoryId: state.serviceCategory?.id,
         selectedVariantKey: state.selectedVariantKey || null,
@@ -74,18 +75,31 @@ export const createBooking = async (state: BookingState, paymentMethod: PaymentM
     };
     
     try {
+        console.log("[BookingService] Calling createBooking with payload:", payload);
         const result = await createBookingFn(payload);
         const data = result.data as { success: boolean; bookingId: string };
         
-        if (!data.success) {
-            throw new Error("Le serveur a refusé la création de la mission.");
+        if (!data || !data.success) {
+            throw new Error("Le serveur n'a pas pu traiter votre demande.");
         }
         
         return data;
     } catch (error: any) {
-        console.error("Critical Error in createBooking service:", error);
-        // On renvoie un message lisible
-        const message = error.details?.message || error.message || "Erreur technique lors de la commande.";
+        console.error("[BookingService] Critical Error in createBooking:", error);
+        
+        // Extract specific message from Firebase HttpsError
+        const message = error.message || "Erreur technique lors de la commande.";
+        
+        // If it's a validation error, try to provide more detail if available
+        if (error.details && typeof error.details === 'object' && error.details !== null) {
+          try {
+              const details = JSON.stringify(error.details);
+              throw new Error(`${message} (${details})`);
+          } catch {
+              throw new Error(message);
+          }
+        }
+        
         throw new Error(message);
     }
 };

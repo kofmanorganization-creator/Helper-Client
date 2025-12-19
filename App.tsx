@@ -7,14 +7,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { createBooking } from './services/bookingService';
 
-// Components
 import BookingStepper from './components/booking/BookingStepper';
 import RealtimeCtaBar from './components/booking/RealtimeCtaBar';
 import BottomNav, { TabView } from './components/BottomNav';
 import VoiceAssistant from './components/VoiceAssistant'; 
 import { ArrowLeft, Loader2, WifiOff } from 'lucide-react';
 
-// Pages
 import Onboarding from './pages/Onboarding'; 
 import Home from './pages/Home';
 import Bookings from './pages/Bookings';
@@ -66,9 +64,6 @@ function App() {
     };
   }, []);
 
-  /**
-   * CALCUL DU PRIX EN TEMPS RÉEL
-   */
   useEffect(() => {
     const updatePrice = async () => {
       if (bookingState.step >= 2 && bookingState.serviceCategory) {
@@ -79,7 +74,7 @@ function App() {
           const payout = pricingEngine.computePayout(price);
           setBookingState(prev => ({ ...prev, price, commission, payout }));
         } catch (err) {
-          console.error("Erreur calcul prix:", err);
+          console.error("Price calculation error:", err);
         } finally {
           setIsLoading(false);
         }
@@ -96,12 +91,9 @@ function App() {
     bookingState.serviceCategory
   ]);
 
-  /**
-   * SOUMISSION FINALE
-   */
   const handleFinalSubmit = useCallback(async () => {
     if (!selectedPaymentMethod) {
-      alert("Veuillez sélectionner un mode de paiement.");
+      alert("Please select a payment method.");
       return;
     }
     
@@ -114,20 +106,16 @@ function App() {
         setBookingState(initialBookingState);
       }
     } catch (error: any) {
-      console.error("[APP] Erreur création commande:", error);
-      alert("Erreur: " + (error.message || "Impossible de créer la mission."));
+      console.error("[APP] Creation error:", error);
+      alert("Error: " + (error.message || "Could not create mission."));
     } finally {
       setIsLoading(false);
     }
   }, [bookingState, selectedPaymentMethod]);
 
-  /**
-   * SESSION RÉSILIENTE & ATTENTE PROFIL SERVEUR
-   */
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
@@ -135,21 +123,22 @@ function App() {
 
       if (firebaseUser) {
         setIsAuthConfirmed(true);
-        // On ne coupe pas le loading tant qu'on n'a pas le document Firestore
-        // pour éviter d'afficher des pages vides ou en erreur
-        const userDocRef = doc(db, "users", firebaseUser.uid);
-        unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists()) {
-            setCurrentUser({ uid: firebaseUser.uid, ...docSnap.data() } as User);
+        setAuthLoading(true);
+        try {
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+              setCurrentUser({ uid: firebaseUser.uid, ...docSnap.data() } as User);
+              setAuthLoading(false);
+            }
+          }, (err) => {
+            console.error("[APP] Firestore sync error:", err);
             setAuthLoading(false);
-          } else {
-             console.log("[APP] En attente de la création du profil par le serveur...");
-             // On laisse authLoading à true pour afficher l'écran de chargement
-          }
-        }, (err) => {
-          console.error("[APP] Erreur Sync Firestore:", err.code);
-          setAuthLoading(false); // On débloque au moins pour voir l'erreur
-        });
+          });
+        } catch (e) {
+          console.error("[APP] Auth process error:", e);
+          setAuthLoading(false);
+        }
       } else {
         setIsAuthConfirmed(false);
         setCurrentUser(null);
@@ -179,12 +168,8 @@ function App() {
   if (authLoading) {
     return (
         <div className="h-screen w-full bg-slate-900 flex flex-col items-center justify-center space-y-6">
-            <div className="relative">
-                 <Loader2 className="animate-spin text-primary-500" size={64} />
-                 <div className="absolute inset-0 flex items-center justify-center font-black text-white text-2xl">H</div>
-            </div>
-            <p className="text-white font-bold tracking-tight animate-pulse">Initialisation sécurisée...</p>
-            <p className="text-slate-500 text-xs text-center max-w-[200px]">Configuration de votre espace personnel par nos serveurs.</p>
+            <Loader2 className="animate-spin text-primary-500" size={64} />
+            <p className="text-white font-bold tracking-tight animate-pulse uppercase text-sm">Initializing Secure Session</p>
         </div>
     );
   }
@@ -224,7 +209,7 @@ function App() {
       <main className="max-w-md mx-auto min-h-screen bg-slate-900/50 relative shadow-2xl flex flex-col overflow-hidden border-x border-white/5">
         {isOffline && (
             <div className="absolute top-0 left-0 right-0 z-[100] px-4 py-1.5 bg-amber-500 text-[10px] font-black text-slate-900 flex items-center justify-center space-x-2">
-                <WifiOff size={12} /> <span>HORS LIGNE</span>
+                <WifiOff size={12} /> <span>OFFLINE MODE</span>
             </div>
         )}
 

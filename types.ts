@@ -45,19 +45,18 @@ export interface User {
   email: string;
   photoUrl: string;
   isPremium: boolean;
+  commune?: string;
 }
 
-// --- MISSION & MATCHING TYPES (NOUVELLE LOGIQUE MÉTIER) ---
-
 export type MissionStatus = 
-  | 'AWAITING_PAYMENT'    // Pour paiement en ligne (avant validation)
-  | 'PENDING_ASSIGNMENT'  // En recherche de prestataire (Cash ou Online validé)
-  | 'ASSIGNED'            // Prestataire trouvé
-  | 'ARRIVED'             // Prestataire sur place
-  | 'IN_PROGRESS'         // Mission en cours
-  | 'COMPLETED_WAIT'      // En attente de scan QR
-  | 'COMPLETED'           // Terminée et payée
-  | 'CANCELLED'           // Annulée
+  | 'AWAITING_PAYMENT'    
+  | 'PENDING_ASSIGNMENT'  
+  | 'ASSIGNED'            
+  | 'ARRIVED'             
+  | 'IN_PROGRESS'         
+  | 'COMPLETED_WAIT'      
+  | 'COMPLETED'           
+  | 'CANCELLED'           
   | 'searching'
   | 'assigned'
   | 'arrived'
@@ -95,8 +94,6 @@ export interface Booking {
   address: string;
   serviceCategoryName?: string;
 }
-
-// --- CHAT TYPES ---
 
 export interface Message {
   id: string;

@@ -9,7 +9,7 @@ import {
   setPersistence,
   browserLocalPersistence
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '../lib/firebase';
 
@@ -22,8 +22,10 @@ export interface RegisterData {
 
 /**
  * SERVICE AUTHENTIFICATION (Helper)
- * Architecture : Le client authentifie, le serveur initialise le profil.
- * Aucune écriture directe dans Firestore/users n'est effectuée ici pour garantir la cohérence.
+ * Architecture PRODUCTION GRADE : 
+ * Le client AUTHENTIFIE uniquement.
+ * Le serveur (Cloud Functions + Triggers) INITIALISE le profil Firestore.
+ * Le client ATTEND l'existence du document pour rediriger.
  */
 class AuthService {
   constructor() {
@@ -43,8 +45,8 @@ class AuthService {
 
   /**
    * Connexion sécurisée
-   * Ne tente aucune création de profil, attend que le système serveur (Cloud Functions / Triggers) 
-   * synchronise le document utilisateur.
+   * ✅ AUCUNE écriture Firestore côté client.
+   * ✅ Force le rafraîchissement du token pour les custom claims.
    */
   async loginWithPhonePassword(phone: string, password: string): Promise<UserCredential> {
     const standardPhone = this.getStandardPhone(phone);
@@ -54,7 +56,10 @@ class AuthService {
       console.log(`[AUTH] Tentative de connexion : ${email}`);
       const userCredential = await signInWithEmailAndPassword(auth, email, password.trim());
       
-      console.log("[AUTH] Login réussi. Le profil sera synchronisé par le serveur.");
+      // Force le rafraîchissement du token pour récupérer les custom claims (rôles, etc.)
+      await userCredential.user.getIdToken(true);
+      
+      console.log("[AUTH] Login réussi. Attente de synchronisation du profil serveur.");
       return userCredential;
     } catch (error: any) {
       console.error("[AUTH] Erreur Connexion:", error.code);
@@ -64,7 +69,8 @@ class AuthService {
 
   /**
    * Inscription d'un nouvel utilisateur
-   * Utilise Firebase Auth pour créer le compte, puis délègue l'initialisation métier au serveur.
+   * ✅ Appel à la Cloud Function complèteRegistration.
+   * ✅ AUCUNE création de document users/{uid} directe.
    */
   async register(data: RegisterData): Promise<FirebaseUser> {
     const { firstName, lastName, phone, password } = data;
@@ -72,17 +78,20 @@ class AuthService {
     const email = this.getVirtualEmail(standardPhone);
 
     try {
-      console.log(`[AUTH] Inscription : ${email}`);
+      console.log(`[AUTH] Création du compte : ${email}`);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password.trim());
       const user = userCredential.user;
 
-      // Mise à jour du nom dans le profil Auth (natif)
+      // Mise à jour du DisplayName natif Firebase
       await updateProfile(user, {
         displayName: `${firstName.trim()} ${lastName.trim()}`
       });
 
-      // Déclenchement de l'initialisation profil via Cloud Function
+      // Délégation de la création du profil métier au serveur
       await this.triggerProfileInitialization(firstName, lastName, standardPhone);
+
+      // Rafraîchissement pour confirmer l'état sécurisé
+      await user.getIdToken(true);
 
       return user;
     } catch (error: any) {
@@ -95,18 +104,16 @@ class AuthService {
   }
 
   /**
-   * Appel à la Cloud Function d'initialisation (completeRegistration)
-   * Cette fonction est responsable de créer le document Firestore sécurisé.
+   * Trigger d'initialisation via Cloud Function (Callable)
    */
   private async triggerProfileInitialization(firstName: string, lastName: string, phone: string) {
     try {
-      console.log("[AUTH] Appel de l'initialisation profil serveur...");
+      console.log("[AUTH] Signalement au serveur (completeRegistration)...");
       const initFn = httpsCallable(functions, 'completeRegistration');
       await initFn({ firstName, lastName, phone });
     } catch (e) {
-      // En cas d'échec de l'appel (timeout ou réseau), on ne tente PAS de setDoc client-side.
-      // Le Trigger Auth 'onUserCreateTrigger' en backend servira de filet de sécurité ultime.
-      console.warn("[AUTH] Initialisation serveur en attente. Le trigger système prendra le relais.");
+      // Si l'appel échoue, le trigger Firestore natif onCreate servira de secours.
+      console.warn("[AUTH] Latence serveur détectée. Le trigger système prendra le relais.");
     }
   }
 
@@ -115,22 +122,26 @@ class AuthService {
     if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
       throw new Error("Numéro ou code secret incorrect.");
     }
-    throw new Error("Erreur de connexion technique. Réessayez plus tard.");
+    throw new Error("Erreur technique. Vérifiez votre connexion.");
   }
 
   /**
-   * Mise à jour de la commune (uniquement possible si le document existe déjà)
+   * Mise à jour de la localisation (Une fois le profil synchronisé)
+   * ✅ Utilise updateDoc car le document doit déjà exister.
    */
   async updateLocation(commune: string): Promise<void> {
     if (!auth.currentUser) return;
     try {
-      await setDoc(doc(db, 'users', auth.currentUser.uid), {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      await updateDoc(userRef, {
         commune,
         onboardingDone: true,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      });
+      console.log("[AUTH] Commune mise à jour avec succès.");
     } catch (e) {
-      console.error("[AUTH] Erreur updateLocation (possible document non encore créé par le serveur):", e);
+      console.error("[AUTH] Erreur updateLocation (document non trouvé) :", e);
+      throw new Error("Profil en cours de création. Réessayez dans un instant.");
     }
   }
 
@@ -138,16 +149,13 @@ class AuthService {
     await signOut(auth);
   }
 
-  /**
-   * Récupère un message personnalisé via l'IA
-   */
   async getWelcomeMessage(firstName: string): Promise<string> {
     try {
       const welcomeFn = httpsCallable(functions, 'generateWelcomeMessage');
       const res = await welcomeFn({ firstName });
       return (res.data as any).text;
     } catch (e) {
-      return `Bienvenue chez Helper, ${firstName} !`;
+      return `Heureux de vous voir, ${firstName} !`;
     }
   }
 }
