@@ -1,9 +1,11 @@
+
 import { initializeApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 import { getAnalytics } from "firebase/analytics";
+import { getMessaging } from "firebase/messaging";
 
 // 1️⃣ CONFIGURATION FIREBASE
 const firebaseConfig = {
@@ -32,3 +34,4 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app, 'europe-west1');
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;

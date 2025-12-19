@@ -1,6 +1,8 @@
-import * as functions from "firebase-functions";
+
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 
+// FIX: Explicitly use v1 region and https
 export const logOtpAttempt = functions.region("europe-west1").https.onCall(
   async (_, context) => {
     if (!context.auth) {

@@ -4,6 +4,7 @@ import { Sparkles, Smartphone, Loader2, AlertCircle, RefreshCw, Lock, CheckCircl
 import { authService } from '../services/authService';
 import { trackOtp } from '../services/analyticsService';
 import { otpService } from '../services/otpService';
+import Login from './Login';
 
 const SLIDES = [
     {
@@ -22,8 +23,9 @@ const Onboarding: React.FC = () => {
   const [step, setStep] = useState<'splash' | 'welcome' | 'login' | 'register' | 'register_geo' | 'final_ai'>('splash');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   // Form Data
   const [phone, setPhone] = useState('');
@@ -51,41 +53,52 @@ const Onboarding: React.FC = () => {
     if (numericValue.length <= 10) setter(numericValue);
   };
 
-  const handlePasswordChange = (val: string) => {
-    const numericValue = val.replace(/\D/g, '');
-    if (numericValue.length <= 6) setPassword(numericValue);
-  };
-
   const handleLogin = async () => {
-    if (phone.length !== 10) { setError("Numéro de téléphone invalide."); return; }
-    if (password.length !== 6) { setError("Le code doit comporter 6 chiffres."); return; }
+    const cleanPhone = phone.trim();
+    const cleanPassword = password.trim();
+
+    if (cleanPhone.length !== 10) { setError("Numéro de téléphone invalide."); return; }
+    if (cleanPassword.length !== 6) { setError("Le code doit comporter 6 chiffres."); return; }
     
     setLoading(true);
     setError(null);
+    setPasswordError(false);
     try {
-      await authService.loginWithPhonePassword(phone, password);
+      await authService.loginWithPhonePassword(cleanPhone, cleanPassword);
+      trackOtp("verified");
     } catch (e: any) {
-      console.error(e);
-      setError("Numéro ou mot de passe incorrect.");
+      console.error("[ONBOARDING] Login failed:", e.message);
+      setError(e.message || "Numéro ou code secret incorrect.");
+      setPasswordError(true);
+      trackOtp("failed");
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegister = async () => {
-    if (!firstName || !lastName) { setError("Veuillez saisir votre nom complet."); return; }
-    if (phone.length !== 10) { setError("Numéro de téléphone invalide."); return; }
-    if (phone !== phoneConfirm) { setError("Les numéros de téléphone ne correspondent pas."); return; }
-    if (password.length !== 6) { setError("Le mot de passe doit comporter 6 chiffres."); return; }
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    const cleanPhone = phone.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanFirstName || !cleanLastName) { setError("Veuillez saisir votre nom complet."); return; }
+    if (cleanPhone.length !== 10) { setError("Numéro de téléphone invalide."); return; }
+    if (cleanPhone !== phoneConfirm.trim()) { setError("Les numéros de téléphone ne correspondent pas."); return; }
+    if (cleanPassword.length !== 6) { setError("Le code secret doit comporter 6 chiffres."); return; }
 
     setLoading(true);
     setError(null);
     try {
-      await authService.register({ firstName, lastName, phone, password });
+      await authService.register({ 
+          firstName: cleanFirstName, 
+          lastName: cleanLastName, 
+          phone: cleanPhone, 
+          password: cleanPassword 
+      });
       setStep('register_geo');
     } catch (e: any) {
-      console.error("Register Error:", e);
-      // Détection explicite de l'email déjà utilisé (lié au téléphone ici)
+      console.error("[ONBOARDING] Register Error:", e.message);
       if (e.message?.includes("déjà associé") || e.code === 'auth/email-already-in-use') {
           setError("Ce numéro est déjà utilisé. Connectez-vous plutôt.");
       } else {
@@ -98,11 +111,17 @@ const Onboarding: React.FC = () => {
 
   const handleFinalize = async () => {
     setLoading(true);
-    if (commune) await authService.updateLocation(commune);
-    const msg = await authService.getWelcomeMessage(firstName);
-    setWelcomeMessage(msg);
-    setLoading(false);
-    setStep('final_ai');
+    try {
+        if (commune) await authService.updateLocation(commune);
+        const msg = await authService.getWelcomeMessage(firstName);
+        setWelcomeMessage(msg);
+        setStep('final_ai');
+    } catch (e) {
+        console.error("[ONBOARDING] Finalization error:", e);
+        setStep('final_ai'); // On passe quand même à l'étape finale
+    } finally {
+        setLoading(false);
+    }
   };
 
   if (step === 'splash') {
@@ -122,7 +141,7 @@ const Onboarding: React.FC = () => {
             <Sparkles size={48} className="text-primary-400 mb-8 animate-pulse" />
             <h2 className="text-2xl font-bold text-white mb-4">Compte Activé !</h2>
             <div className="bg-slate-800 border border-slate-700 p-6 rounded-3xl italic text-primary-200 shadow-xl">
-                "{welcomeMessage}"
+                "{welcomeMessage || "Bienvenue chez Helper !"}"
             </div>
             <button 
               onClick={() => window.location.reload()}
@@ -159,65 +178,17 @@ const Onboarding: React.FC = () => {
       )}
 
       {step === 'login' && (
-        <div className="min-h-screen flex flex-col p-6 pt-12 animate-fade-in">
-            <h1 className="text-3xl font-bold text-white tracking-tight mb-8">Ravi de vous revoir</h1>
-
-            <div className="space-y-4">
-                <div className="bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 shadow-inner">
-                    <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Numéro de Téléphone</label>
-                    <div className="flex items-center">
-                        <Smartphone size={18} className="text-slate-500 mr-2" />
-                        <span className="text-slate-300 font-bold mr-1">+225</span>
-                        <input 
-                            type="tel" 
-                            className="bg-transparent text-white w-full outline-none font-bold text-lg" 
-                            placeholder="0707070707" 
-                            value={phone} 
-                            onChange={e => handlePhoneChange(e.target.value, setPhone)}
-                            maxLength={10} 
-                        />
-                    </div>
-                </div>
-
-                <div className="bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 shadow-inner">
-                    <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Code de sécurité (6 chiffres)</label>
-                    <div className="flex items-center">
-                        <Lock size={18} className="text-slate-500 mr-2" />
-                        <input 
-                            type={showPassword ? "text" : "password"} 
-                            className="bg-transparent text-white w-full outline-none font-bold text-lg tracking-widest" 
-                            placeholder="••••••" 
-                            value={password} 
-                            onChange={e => handlePasswordChange(e.target.value)}
-                            maxLength={6} 
-                        />
-                        <button onClick={() => setShowPassword(!showPassword)} className="text-slate-500 hover:text-white transition-colors">
-                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {error && (
-                <div className="mt-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 animate-fade-in-up flex items-center text-red-400 text-sm font-medium">
-                    <AlertCircle size={18} className="mr-2 shrink-0" />
-                    {error}
-                </div>
-            )}
-
-            <div className="mt-auto pb-10">
-                <button 
-                    onClick={handleLogin}
-                    disabled={loading || phone.length !== 10 || password.length !== 6}
-                    className="w-full py-4 bg-primary-600 text-white font-bold rounded-2xl shadow-xl flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
-                >
-                    {loading ? <Loader2 className="animate-spin" /> : 'SE CONNECTER'}
-                </button>
-                <button onClick={() => { setError(null); setStep('register'); }} className="w-full py-3 mt-2 text-slate-500 text-sm font-medium hover:text-white transition-colors">
-                    Nouveau sur Helper ? Créer un compte
-                </button>
-            </div>
-        </div>
+        <Login 
+          phone={phone}
+          setPhone={setPhone}
+          password={password}
+          setPassword={setPassword}
+          loading={loading}
+          error={error}
+          passwordError={passwordError}
+          onLogin={handleLogin}
+          onSwitchToRegister={() => { setError(null); setPasswordError(false); setStep('register'); }}
+        />
       )}
 
       {step === 'register' && (
@@ -241,7 +212,7 @@ const Onboarding: React.FC = () => {
                     <div className="flex items-center">
                         <Smartphone size={18} className="text-slate-500 mr-2" />
                         <span className="text-slate-300 font-bold mr-1">+225</span>
-                        <input type="tel" className="bg-transparent text-white w-full outline-none font-bold" value={phone} onChange={e => handlePhoneChange(e.target.value, setPhone)} maxLength={10} placeholder="0707070707" />
+                        <input type="tel" className="bg-transparent text-white w-full outline-none font-bold text-lg" value={phone} onChange={e => handlePhoneChange(e.target.value, setPhone)} maxLength={10} placeholder="0707070707" />
                     </div>
                 </div>
 
@@ -250,7 +221,7 @@ const Onboarding: React.FC = () => {
                     <div className="flex items-center">
                         <Smartphone size={18} className="text-slate-500 mr-2" />
                         <span className="text-slate-300 font-bold mr-1">+225</span>
-                        <input type="tel" className="bg-transparent text-white w-full outline-none font-bold" value={phoneConfirm} onChange={e => handlePhoneChange(e.target.value, setPhoneConfirm)} maxLength={10} placeholder="Réécrire le numéro" />
+                        <input type="tel" className="bg-transparent text-white w-full outline-none font-bold text-lg" value={phoneConfirm} onChange={e => handlePhoneChange(e.target.value, setPhoneConfirm)} maxLength={10} placeholder="Réécrire le numéro" />
                         {phone.length === 10 && phone === phoneConfirm && <CheckCircle2 size={18} className="text-green-500 ml-2" />}
                         {isPhoneMismatch && <XCircle size={18} className="text-red-500 ml-2 animate-pulse" />}
                     </div>
@@ -267,15 +238,21 @@ const Onboarding: React.FC = () => {
                     <div className="flex items-center">
                         <Lock size={18} className="text-slate-500 mr-2" />
                         <input 
-                            type={showPassword ? "text" : "password"} 
-                            className="bg-transparent text-white w-full outline-none font-bold tracking-widest" 
+                            type={showRegisterPassword ? "text" : "password"}
+                            className="bg-transparent text-white w-full outline-none font-bold text-lg tracking-widest" 
                             value={password} 
-                            onChange={e => handlePasswordChange(e.target.value)} 
+                            onChange={(e) => {
+                                const numericValue = e.target.value.replace(/\D/g, '');
+                                if (numericValue.length <= 6) setPassword(numericValue);
+                            }} 
                             maxLength={6} 
                             placeholder="••••••" 
                         />
-                        <button onClick={() => setShowPassword(!showPassword)} className="text-slate-500 hover:text-white transition-colors">
-                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        <button 
+                            onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                            className="p-1 text-slate-500 hover:text-white transition-colors"
+                        >
+                            {showRegisterPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
                 </div>

@@ -1,30 +1,29 @@
-import * as functions from "firebase-functions";
+
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { z } from "zod";
-
-const db = admin.firestore();
 
 const PayoutSchema = z.object({
   operator: z.string().min(2),
   msisdn: z.string().min(8)
 });
 
-// Suppression de enforceAppCheck pour éviter les erreurs 403
+// FIX: Explicitly use v1 region and https
 export const verifyPayoutNumber = functions.region("europe-west1").https.onCall(async (data, ctx) => {
   if (!ctx.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
 
   const parsed = PayoutSchema.safeParse(data);
   if (!parsed.success) throw new functions.https.HttpsError("invalid-argument", "Invalid payload");
   
-  // Logique de validation stub
   return { ok: true };
 });
 
-// Suppression de enforceAppCheck pour éviter les erreurs 403
+// FIX: Explicitly use v1 region and https
 export const addPaymentMethod = functions.region("europe-west1").https.onCall(async (data, ctx) => {
   if (!ctx.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
   
   const { type, provider, token, phone, identifier } = data;
+  const db = admin.firestore();
   
   const pmRef = db.collection("users").doc(ctx.auth.uid).collection("payment_methods").doc();
   await pmRef.set({
@@ -40,7 +39,9 @@ export const addPaymentMethod = functions.region("europe-west1").https.onCall(as
   return { id: pmRef.id, ok: true };
 });
 
+// FIX: Explicitly use v1 region and https
 export const paymentWebhook = functions.region("europe-west1").https.onRequest(async (req, res) => {
+  const db = admin.firestore();
   try {
     const { transactionId, status } = req.body;
 

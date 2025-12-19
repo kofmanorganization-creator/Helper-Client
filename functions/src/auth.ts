@@ -1,67 +1,54 @@
-import * as functions from "firebase-functions";
+
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { z } from "zod";
 
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
 const RegistrationSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  phone: z.string().length(10, "Phone must be 10 digits"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  phone: z.string().min(10),
 });
 
+/**
+ * Finalise l'inscription (Callable).
+ * Utilisé par le client juste après l'auth.
+ */
 export const completeRegistration = functions.region("europe-west1").https.onCall(async (data, context) => {
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated via OTP first.");
+        throw new functions.https.HttpsError("unauthenticated", "Auth requis.");
     }
 
     const parsed = RegistrationSchema.safeParse(data);
     if (!parsed.success) {
-        throw new functions.https.HttpsError("invalid-argument", "Invalid registration payload.", parsed.error.format());
+        throw new functions.https.HttpsError("invalid-argument", "Données invalides.");
     }
 
     const { uid } = context.auth;
-    const { firstName, lastName, phone, password } = parsed.data;
-
-    const email = `+225${phone}@helper.app`;
-    try {
-        await admin.auth().updateUser(uid, {
-            email: email,
-            password: password,
-            displayName: `${firstName} ${lastName}`,
-            emailVerified: true,
-        });
-    } catch (error) {
-        console.error("Error updating auth user:", error);
-        throw new functions.https.HttpsError("internal", "Could not update user credentials.");
-    }
-    
-    const userDoc = {
-        uid,
-        firstName,
-        lastName,
-        phone,
-        email,
-        photoUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=0D8ABC&color=fff`,
-        role: 'client',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        onboardingDone: false
-    };
+    const { firstName, lastName, phone } = parsed.data;
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
 
     try {
-        await admin.firestore().collection("users").doc(uid).set(userDoc, { merge: true });
-    } catch (error) {
-        console.error("Error creating firestore profile:", error);
-        await admin.auth().updateUser(uid, { email: undefined, password: undefined });
-        throw new functions.https.HttpsError("internal", "Could not save user profile.");
+        const db = admin.firestore();
+        console.log(`[AUTH-CALL] Finalisation profil Firestore pour : ${uid}`);
+
+        // On utilise doc().set({ ... }, { merge: true }) pour être idempotent
+        // Si le trigger onCreate a déjà créé le doc, on ne fait que merger les noms
+        await db.collection("users").doc(uid).set({
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            phone: cleanPhone,
+            photoUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=007DFF&color=fff`,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("[AUTH-CALL] Erreur lors de la finalisation :", error);
+        // On ne throw pas d'erreur interne car le trigger onCreate assurera la survie du doc
+        return { success: false, error: "Initialisation asynchrone en cours." };
     }
-
-    return { success: true };
-});
-
-export const sendOtp = functions.region("europe-west1").https.onCall(async (data, context) => {
-  throw new functions.https.HttpsError('unimplemented', 'Use client SDK.');
-});
-
-export const verifyOtp = functions.region("europe-west1").https.onCall(async (data, context) => {
-  throw new functions.https.HttpsError('unimplemented', 'Use client SDK.');
 });

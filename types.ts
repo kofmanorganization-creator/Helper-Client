@@ -1,5 +1,4 @@
 
-
 import { Timestamp } from 'firebase/firestore';
 
 export type FirestoreTimestamp = Timestamp;
@@ -37,7 +36,7 @@ export type BookingState = {
   payout: number | null;
 };
 
-export type PaymentMethod = 'mtn' | 'orange' | 'moov' | 'wave' | 'card' | 'cash';
+export type PaymentMethod = 'wave' | 'orange' | 'mtn' | 'card' | 'cash';
 
 export interface User {
   uid: string;
@@ -48,11 +47,60 @@ export interface User {
   isPremium: boolean;
 }
 
+// --- MISSION & MATCHING TYPES (NOUVELLE LOGIQUE MÉTIER) ---
+
+export type MissionStatus = 
+  | 'AWAITING_PAYMENT'    // Pour paiement en ligne (avant validation)
+  | 'PENDING_ASSIGNMENT'  // En recherche de prestataire (Cash ou Online validé)
+  | 'ASSIGNED'            // Prestataire trouvé
+  | 'ARRIVED'             // Prestataire sur place
+  | 'IN_PROGRESS'         // Mission en cours
+  | 'COMPLETED_WAIT'      // En attente de scan QR
+  | 'COMPLETED'           // Terminée et payée
+  | 'CANCELLED'           // Annulée
+  | 'searching'
+  | 'assigned'
+  | 'arrived'
+  | 'in_progress'
+  | 'completed_wait'
+  | 'scanned'
+  | 'reviewed'
+  | 'pending'
+  | 'pending_payment'
+  | 'completed'
+  | 'cancelled';
+
+export interface Provider {
+  id: string;
+  name: string;
+  photoUrl: string;
+  rating: number;
+  jobsCount: number;
+  vehicle?: string;
+  phone: string;
+  lat: number;
+  lng: number;
+}
+
+export interface Booking {
+  id: string;
+  clientId: string;
+  serviceName: string;
+  scheduledAt: FirestoreTimestamp;
+  status: MissionStatus;
+  paymentMethod: PaymentMethod;
+  paymentStatus: 'CASH_PENDING' | 'PAID' | 'FAILED' | 'INITIATED';
+  totalAmount: number;
+  provider?: Provider | null;
+  address: string;
+  serviceCategoryName?: string;
+}
+
 // --- CHAT TYPES ---
 
 export interface Message {
   id: string;
-  senderId: string; // 'user' or 'provider'
+  senderId: string;
   text: string;
   timestamp: Date | FirestoreTimestamp;
   isRead: boolean;
@@ -67,53 +115,4 @@ export interface ChatSession {
   lastMessageTime: Date;
   unreadCount: number;
   isOnline: boolean;
-}
-
-// --- MISSION & MATCHING TYPES ---
-
-export type MissionStatus = 
-  | 'searching'      // Dynamic Matching in progress
-  | 'assigned'       // Provider found
-  | 'arrived'        // Provider at location
-  | 'in_progress'    // Job started
-  | 'completed_wait' // Job done, waiting for QR Scan
-  | 'scanned'        // QR Scanned, Payment processing
-  | 'reviewed'       // Final state
-  | 'pending'        // Just created, before searching
-  | 'pending_payment'// Payment initiated, waiting for webhook confirmation
-  | 'completed'      // Reviewed or just finished
-  | 'cancelled';     // Cancelled by user or provider
-
-export interface Provider {
-  id: string;
-  name: string;
-  photoUrl: string;
-  rating: number;
-  jobsCount: number;
-  vehicle?: string;
-  phone: string;
-  lat: number;
-  lng: number;
-}
-
-export interface Mission {
-  id: string;
-  serviceName: string;
-  status: MissionStatus;
-  provider: Provider | null;
-  etaMinutes: number | null;
-  price: number;
-  qrToken?: string;
-}
-
-export interface Booking {
-  id: string;
-  clientId: string;
-  serviceName: string;
-  scheduledAt: FirestoreTimestamp;
-  status: MissionStatus;
-  totalAmount: number;
-  provider?: Provider | null;
-  address: string;
-  serviceCategoryName?: string;
 }

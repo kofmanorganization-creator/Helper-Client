@@ -1,20 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BookingState, PaymentMethod, ServiceCategory, User } from './types';
 import { PricingEngineFirebase } from './services/pricingEngine';
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { createBooking } from './services/bookingService';
-import { SERVICES_CATEGORIES } from './constants'; 
-import { analytics, auth, db } from './lib/firebase';
-import { logEvent } from 'firebase/analytics';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 
 // Components
 import BookingStepper from './components/booking/BookingStepper';
 import RealtimeCtaBar from './components/booking/RealtimeCtaBar';
 import BottomNav, { TabView } from './components/BottomNav';
 import VoiceAssistant from './components/VoiceAssistant'; 
-import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff } from 'lucide-react';
 
 // Pages
 import Onboarding from './pages/Onboarding'; 
@@ -46,98 +44,141 @@ const initialBookingState: BookingState = {
 };
 
 function App() {
-  // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthConfirmed, setIsAuthConfirmed] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
-
-  // Navigation State
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [currentTab, setCurrentTab] = useState<TabView>('home');
   const [isBookingWizardOpen, setIsBookingWizardOpen] = useState(false);
-  
-  // Mission Live State
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
-  
-  // Voice Assistant State
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-
-  // Booking Wizard State
   const [bookingState, setBookingState] = useState<BookingState>(initialBookingState);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>('wave');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>('cash');
+
+  useEffect(() => {
+    const handleStatus = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
+  }, []);
 
   /**
-   * ✅ SOLUTION PRO : Surveillance de session avec redirection forcée.
+   * CALCUL DU PRIX EN TEMPS RÉEL (Étapes 2, 3 et 4)
    */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setAuthError(null);
-      try {
-        if (firebaseUser) {
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            setCurrentUser({ uid: firebaseUser.uid, ...userData } as User);
-            
-            // FORCER LE REDIRECT : On réinitialise la vue pour atterrir sur le dashboard
-            setCurrentTab('home');
-            setIsBookingWizardOpen(false);
-            setAuthLoading(false);
-          } else {
-            console.warn("Profil Firestore manquant. Nettoyage...");
-            setCurrentUser(null);
-            await signOut(auth);
-            setAuthLoading(false);
-          }
-        } else {
-          setCurrentUser(null);
-          setAuthLoading(false);
+    const updatePrice = async () => {
+      // On calcule le prix si on a au moins une catégorie et qu'on est au delà de l'étape 1
+      if (bookingState.step >= 2 && bookingState.serviceCategory) {
+        setIsLoading(true);
+        try {
+          const price = await pricingEngine.getPrice(bookingState);
+          const commission = pricingEngine.computeCommission(price);
+          const payout = pricingEngine.computePayout(price);
+          setBookingState(prev => ({ ...prev, price, commission, payout }));
+        } catch (err) {
+          console.error("Erreur calcul prix:", err);
+        } finally {
+          setIsLoading(false);
         }
-      } catch (err: any) {
-        console.error("Auth Sync Error:", err);
-        setAuthError("Erreur de synchronisation du compte.");
+      }
+    };
+    updatePrice();
+  }, [
+    bookingState.step, 
+    bookingState.selectedVariantKey, 
+    bookingState.surfaceArea, 
+    bookingState.customQuantity,
+    bookingState.scheduledDateTime,
+    bookingState.address,
+    bookingState.serviceCategory
+  ]);
+
+  /**
+   * SOUMISSION FINALE DE LA COMMANDE
+   */
+  const handleFinalSubmit = useCallback(async () => {
+    if (!selectedPaymentMethod) {
+      alert("Veuillez sélectionner un mode de paiement.");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      console.log("[APP] Envoi de la commande...");
+      const result = await createBooking(bookingState, selectedPaymentMethod);
+      
+      if (result && result.success && result.bookingId) {
+        console.log("[APP] Commande créée avec succès:", result.bookingId);
+        setActiveMissionId(result.bookingId);
+        setIsBookingWizardOpen(false);
+        setBookingState(initialBookingState);
+      } else {
+        throw new Error("Réponse serveur invalide");
+      }
+    } catch (error: any) {
+      console.error("[APP] Erreur création commande:", error);
+      alert("Erreur: " + (error.message || "Impossible de créer la mission. Vérifiez votre connexion."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [bookingState, selectedPaymentMethod]);
+
+  /**
+   * SESSION RÉSILIENTE
+   */
+  useEffect(() => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
+      if (firebaseUser) {
+        setIsAuthConfirmed(true);
+        setAuthLoading(false);
+
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+        unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setCurrentUser({ uid: firebaseUser.uid, ...docSnap.data() } as User);
+          } else {
+            setCurrentUser({
+              uid: firebaseUser.uid,
+              firstName: firebaseUser.displayName?.split(' ')[0] || "Utilisateur",
+              lastName: firebaseUser.displayName?.split(' ')[1] || "Helper",
+              email: firebaseUser.email || "",
+              photoUrl: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=${firebaseUser.uid}&background=007DFF&color=fff`,
+              isPremium: false
+            } as User);
+          }
+        }, (err) => {
+          console.error("[APP] Erreur Sync Firestore:", err.code);
+        });
+      } else {
+        setIsAuthConfirmed(false);
+        setCurrentUser(null);
         setAuthLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) (unsubscribeProfile as () => void)();
+    };
   }, []);
 
-  // Calcul du prix en temps réel
-  useEffect(() => {
-    if (!isBookingWizardOpen) return;
-
-    const calculatePrice = async () => {
-      const newPrice = await pricingEngine.getPrice(bookingState);
-      const newCommission = pricingEngine.computeCommission(newPrice);
-      const newPayout = pricingEngine.computePayout(newPrice);
-      
-      setBookingState(prev => ({
-        ...prev,
-        price: newPrice,
-        commission: newCommission,
-        payout: newPayout,
-      }));
-    };
-
-    calculatePrice();
-  }, [bookingState.selectedVariantKey, bookingState.surfaceArea, bookingState.customQuantity, bookingState.serviceCategory, isBookingWizardOpen]);
-
-  // Actions
   const startNewBooking = async (category?: ServiceCategory) => {
     if (activeMissionId) return;
-
     if (category) {
         setIsLoading(true);
         const rules = await pricingEngine.getPricingRuleForCategory(category.id);
-        setBookingState({
-            ...initialBookingState,
-            step: 2,
-            serviceCategory: category,
-            pricingRule: rules,
-        });
+        setBookingState({ ...initialBookingState, step: 2, serviceCategory: category, pricingRule: rules });
         setIsLoading(false);
     } else {
         setBookingState(initialBookingState);
@@ -145,161 +186,39 @@ function App() {
     setIsBookingWizardOpen(true);
   };
 
-  const handleVoiceBookingStart = (categoryName?: string) => {
-      if (categoryName) {
-          const match = SERVICES_CATEGORIES.find(c => 
-              c.name.toLowerCase().includes(categoryName.toLowerCase()) || 
-              categoryName.toLowerCase().includes(c.name.toLowerCase())
-          );
-          if (match) startNewBooking(match);
-          else startNewBooking();
-      } else {
-          startNewBooking();
-      }
-  };
-
-  const handleVoiceUpdateBooking = (params: any) => {
-      setBookingState(prev => {
-          let newState = { ...prev };
-          if (params.surface_area) newState.surfaceArea = Number(params.surface_area);
-          if (params.address) newState.address = String(params.address);
-          if (params.custom_quantity) {
-               newState.selectedVariantKey = 'custom';
-               newState.customQuantity = Number(params.custom_quantity);
-          }
-          return newState;
-      });
-  };
-
-  const handleVoiceNavigation = (tab: string) => {
-      if (['home', 'bookings', 'messages', 'profile'].includes(tab)) {
-          setCurrentTab(tab as TabView);
-          closeBookingWizard();
-      }
-  };
-
-  const closeBookingWizard = () => {
-    setIsBookingWizardOpen(false);
-    setBookingState(initialBookingState);
-  };
-
-  const handleSelectService = async (category: ServiceCategory) => {
-    setIsLoading(true);
-    const rules = await pricingEngine.getPricingRuleForCategory(category.id);
-    setBookingState(prev => ({
-      ...initialBookingState,
-      step: prev.serviceCategory?.id === category.id ? 1 : 2,
-      serviceCategory: category,
-      pricingRule: rules,
-    }));
-    setIsLoading(false);
-  };
-  
-  const handleNextStep = () => {
-    if (bookingState.step === 4) {
-      handleConfirmAndPay();
-      return;
-    }
-    setBookingState(prev => ({ ...prev, step: prev.step + 1 }));
-  };
-
-  const handlePrevStep = () => {
-    if (bookingState.step > 1) {
-      setBookingState(prev => ({ ...prev, step: prev.step - 1 }));
-    } else {
-      closeBookingWizard();
-    }
-  };
-  
-  const handleConfirmAndPay = async () => {
-      if(!selectedPaymentMethod) {
-          alert("Veuillez sélectionner une méthode de paiement.");
-          return;
-      }
-      setIsLoading(true);
-      try {
-          const result = await createBooking(bookingState, selectedPaymentMethod);
-
-          if(result.success && result.bookingId) {
-              if (analytics) {
-                logEvent(analytics, 'create_booking', {
-                    service_category: bookingState.serviceCategory?.name,
-                    total_price: bookingState.price,
-                    payment_method: selectedPaymentMethod,
-                });
-              }
-              closeBookingWizard();
-              setActiveMissionId(result.bookingId); 
-          } else {
-              alert("La création de la réservation a échoué.");
-          }
-      } catch (error: any) {
-          console.error("Booking failed:", error);
-          alert(`Erreur: ${error.message || 'Une erreur est survenue.'}`);
-      } finally {
-          setIsLoading(false);
-      }
-  };
-
   if (authLoading) {
     return (
-        <div className="h-screen w-full bg-slate-900 flex flex-col items-center justify-center space-y-4">
-            <div className="w-20 h-20 relative">
-                 <Loader2 className="animate-spin text-primary-500 absolute inset-0" size={80} />
+        <div className="h-screen w-full bg-slate-900 flex flex-col items-center justify-center space-y-6">
+            <div className="relative">
+                 <Loader2 className="animate-spin text-primary-500" size={64} />
                  <div className="absolute inset-0 flex items-center justify-center font-black text-white text-2xl">H</div>
             </div>
-            <p className="text-slate-500 text-[10px] animate-pulse tracking-[0.3em] font-black uppercase">Sécurisation en cours</p>
+            <p className="text-white font-bold tracking-tight">Helper</p>
         </div>
     );
   }
   
-  // Onboarding est affiché uniquement si aucun utilisateur n'est connecté
-  if (!currentUser) {
+  if (!isAuthConfirmed) {
       return <Onboarding />;
   }
 
   const renderBookingWizardStep = () => {
     switch (bookingState.step) {
-      case 1:
-        return <ServiceHubPage 
-                  onSelectService={handleSelectService}
-                  selectedCategory={bookingState.serviceCategory}
-                />;
-      case 2:
-        return <VariantSelectorPage
-                  bookingState={bookingState}
-                  onSelectVariant={key => setBookingState(p => ({...p, selectedVariantKey: key, customQuantity: null}))}
-                  onSurfaceChange={surface => setBookingState(p => ({...p, surfaceArea: surface, selectedVariantKey: String(surface)}))}
-                  onCustomChange={(quantity) => setBookingState(p => ({...p, selectedVariantKey: 'custom', customQuantity: quantity}))}
-                />;
-      case 3:
-        return <ScheduleAddressPage
-                  address={bookingState.address}
-                  onAddressChange={addr => setBookingState(p => ({...p, address: addr}))}
-                  onDateTimeChange={date => setBookingState(p => ({...p, scheduledDateTime: date}))}
-                />;
-      case 4:
-        return <SummaryPaymentPage 
-                  bookingState={bookingState}
-                  selectedMethod={selectedPaymentMethod}
-                  onSelectPaymentMethod={setSelectedPaymentMethod}
-                />;
-      default:
-        return null;
+      case 1: return <ServiceHubPage onSelectService={async (cat) => {
+        setIsLoading(true);
+        const rules = await pricingEngine.getPricingRuleForCategory(cat.id);
+        setBookingState(p => ({...initialBookingState, step: 2, serviceCategory: cat, pricingRule: rules}));
+        setIsLoading(false);
+      }} selectedCategory={bookingState.serviceCategory} />;
+      case 2: return <VariantSelectorPage bookingState={bookingState} onSelectVariant={k => setBookingState(p => ({...p, selectedVariantKey: k}))} onSurfaceChange={s => setBookingState(p => ({...p, surfaceArea: s}))} onCustomChange={q => setBookingState(p => ({...p, customQuantity: q}))} />;
+      case 3: return <ScheduleAddressPage address={bookingState.address} onAddressChange={a => setBookingState(p => ({...p, address: a}))} onDateTimeChange={d => setBookingState(p => ({...p, scheduledDateTime: d}))} />;
+      case 4: return <SummaryPaymentPage bookingState={bookingState} selectedMethod={selectedPaymentMethod} onSelectPaymentMethod={setSelectedPaymentMethod} />;
+      default: return null;
     }
   };
 
   const renderMainContent = () => {
-      if (activeMissionId) {
-          return <MissionLive 
-                    missionId={activeMissionId}
-                    onMissionComplete={() => {
-                        setActiveMissionId(null);
-                        setCurrentTab('home');
-                    }} 
-                 />;
-      }
-
+      if (activeMissionId) return <MissionLive missionId={activeMissionId} onMissionComplete={() => { setActiveMissionId(null); setCurrentTab('bookings'); }} />;
       switch (currentTab) {
           case 'home': return <Home currentUser={currentUser} onStartNewBooking={startNewBooking} />;
           case 'bookings': return <Bookings />;
@@ -312,69 +231,41 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans aurora-background">
       <main className="max-w-md mx-auto min-h-screen bg-slate-900/50 relative shadow-2xl flex flex-col overflow-hidden border-x border-white/5">
-        
-        {authError && (
-            <div className="fixed top-0 left-0 right-0 z-[100] p-4 bg-red-600 text-white text-[10px] font-black flex items-center justify-between animate-fade-in">
-                <div className="flex items-center">
-                    <AlertTriangle size={14} className="mr-2" />
-                    ERREUR SYSTÈME : {authError.toUpperCase()}
-                </div>
-                <button onClick={() => window.location.reload()} className="underline decoration-white/30">RÉESSAYER</button>
+        {isOffline && (
+            <div className="absolute top-0 left-0 right-0 z-[100] px-4 py-1.5 bg-amber-500 text-[10px] font-black text-slate-900 flex items-center justify-center space-x-2">
+                <WifiOff size={12} /> <span>HORS LIGNE</span>
             </div>
         )}
 
         {isBookingWizardOpen ? (
           <div className="absolute inset-0 z-40 bg-slate-900 flex flex-col animate-fade-in">
-             <div className="absolute top-0 left-0 right-0 z-50 p-4 pt-10 pointer-events-none">
-                <div className="relative pointer-events-auto flex items-center justify-center">
-                    <button 
-                        onClick={handlePrevStep} 
-                        className="absolute left-0 top-1/2 -translate-y-1/2 p-2 w-10 h-10 rounded-full bg-slate-900/40 backdrop-blur-md text-white border border-white/10 hover:bg-slate-800 transition-colors z-20 flex items-center justify-center"
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                    <div className="w-full pl-12">
-                         <BookingStepper currentStep={bookingState.step} />
-                    </div>
-                </div>
+             <div className="absolute top-0 left-0 right-0 z-50 p-4 pt-10 flex items-center">
+                <button 
+                  onClick={() => bookingState.step > 1 ? setBookingState(p => ({...p, step: p.step - 1})) : setIsBookingWizardOpen(false)} 
+                  className="p-2 w-10 h-10 rounded-full bg-slate-800 text-white border border-white/10 flex items-center justify-center transition-colors active:scale-95"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="flex-1 ml-4"><BookingStepper currentStep={bookingState.step} /></div>
             </div>
-            
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
-              {renderBookingWizardStep()}
-            </div>
-            
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">{renderBookingWizardStep()}</div>
             <RealtimeCtaBar 
-              bookingState={bookingState} 
-              selectedMethod={selectedPaymentMethod}
-              onNext={handleNextStep}
-              isLoading={isLoading}
+                bookingState={bookingState} 
+                selectedMethod={selectedPaymentMethod} 
+                onNext={() => {
+                  if (bookingState.step < 4) {
+                    setBookingState(p => ({...p, step: p.step + 1}));
+                  } else {
+                    handleFinalSubmit();
+                  }
+                }} 
+                isLoading={isLoading} 
             />
           </div>
         ) : (
-          <>
-            <div className="flex-1 overflow-y-auto no-scrollbar">
-                {renderMainContent()}
-            </div>
-            
-            {!activeMissionId && (
-                <BottomNav 
-                    currentTab={currentTab} 
-                    onTabChange={setCurrentTab} 
-                    onOpenAssistant={() => setIsAssistantOpen(prev => !prev)} 
-                    isAssistantActive={isAssistantOpen}
-                />
-            )}
-          </>
+          <><div className="flex-1 overflow-y-auto no-scrollbar">{renderMainContent()}</div><BottomNav currentTab={currentTab} onTabChange={setCurrentTab} onOpenAssistant={() => setIsAssistantOpen(!isAssistantOpen)} isAssistantActive={isAssistantOpen} /></>
         )}
-        
-        <VoiceAssistant 
-            isOpen={isAssistantOpen} 
-            onClose={() => setIsAssistantOpen(false)} 
-            onNavigate={handleVoiceNavigation}
-            onStartBooking={handleVoiceBookingStart}
-            onUpdateBooking={handleVoiceUpdateBooking}
-        />
-        
+        <VoiceAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} onNavigate={t => { setCurrentTab(t as TabView); setIsBookingWizardOpen(false); }} onStartBooking={startNewBooking} onUpdateBooking={p => setBookingState(prev => ({...prev, ...p}))} />
       </main>
     </div>
   );

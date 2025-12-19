@@ -1,22 +1,33 @@
-import * as functions from "firebase-functions";
+
+import * as functions from "firebase-functions/v1";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-
+// FIX: Explicitly use v1 region and https
 export const generateWelcomeMessage = functions.region("europe-west1").https.onCall(async (data, context) => {
   const { firstName } = data;
   if (!firstName || typeof firstName !== 'string') {
     throw new functions.https.HttpsError("invalid-argument", "The function must be called with a 'firstName' argument.");
   }
 
+  // Initialisation sécurisée à l'intérieur de l'appel
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+      console.error("API_KEY environment variable is missing in Cloud Functions.");
+      return { text: `Bienvenue à bord, ${firstName} ! Helper est ravi de vous compter parmi nous.` };
+  }
+
   try {
+    // FIX: Initialize GoogleGenAI with named parameter
+    const ai = new GoogleGenAI({ apiKey });
     const prompt = `Génère un message de bienvenue très court, chaleureux et légèrement futuriste pour un nouvel utilisateur nommé "${firstName}" qui s'inscrit à "Helper", une application premium de services à domicile en Côte d'Ivoire. Le ton doit être rassurant et professionnel. Le message doit être en français. Ne mets pas de guillemets autour du message.`;
 
+    // FIX: Correct generateContent call for text tasks
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
     });
     
+    // FIX: Access .text property directly (do not call as a function)
     const text = response.text;
 
     if (!text) {

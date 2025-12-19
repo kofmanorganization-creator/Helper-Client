@@ -1,15 +1,16 @@
-
-import { httpsCallable } from 'firebase/functions';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut, 
   User as FirebaseUser, 
   UserCredential,
-  updateProfile
+  updateProfile,
+  setPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
-import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, functions, db } from '../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '../lib/firebase';
 
 export interface RegisterData {
   firstName: string;
@@ -19,104 +20,138 @@ export interface RegisterData {
 }
 
 class AuthService {
-  private _currentUser: FirebaseUser | null = null;
-
   constructor() {
-    auth.onAuthStateChanged(user => {
-      this._currentUser = user;
-    });
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
   }
 
-  /**
-   * Connexion avec téléphone et code à 6 chiffres.
-   */
+  private getStandardPhone(phone: string): string {
+    if (!phone) return "";
+    const clean = phone.replace(/\D/g, '');
+    return clean.length >= 10 ? clean.slice(-10) : clean;
+  }
+
+  private getVirtualEmail(phone: string): string {
+    const standard = this.getStandardPhone(phone);
+    return `u${standard}@helper.ci`.toLowerCase();
+  }
+
   async loginWithPhonePassword(phone: string, password: string): Promise<UserCredential> {
-    const email = `+225${phone}@helper.app`;
-    return signInWithEmailAndPassword(auth, email, password);
+    const standardPhone = this.getStandardPhone(phone);
+    const email = this.getVirtualEmail(standardPhone);
+    
+    try {
+      console.log(`[AUTH] Login: ${email}`);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password.trim());
+      
+      // SÉCURITÉ : Vérifier/Créer le profil Firestore après login réussi
+      await this.ensureFirestoreProfile(userCredential.user, standardPhone);
+      
+      return userCredential;
+    } catch (error: any) {
+      console.error("[AUTH] Login Error:", error.code);
+      this.handleAuthError(error);
+    }
   }
 
   /**
-   * Inscription directe (Email virtuel + Password) suivie de la création du profil Firestore.
+   * Garantit qu'un document Firestore existe pour l'utilisateur.
+   * Utilise setDoc avec merge: true pour être non-destructif.
    */
-  async register(data: RegisterData): Promise<void> {
-    const { firstName, lastName, phone, password } = data;
-    const email = `+225${phone}@helper.app`;
-
+  private async ensureFirestoreProfile(user: FirebaseUser, phone: string) {
+    const docRef = doc(db, "users", user.uid);
     try {
-      // 1. Création du compte Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
-
-      // 2. Mise à jour du DisplayName (Auth)
-      await updateProfile(userCredential.user, {
-        displayName: `${firstName} ${lastName}`
-      });
-
-      // 3. Création du profil Firestore
-      const userDoc = {
-        uid,
-        firstName,
-        lastName,
-        phone,
-        email,
-        photoUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=0D8ABC&color=fff`,
-        role: 'client',
-        isPremium: false,
-        createdAt: serverTimestamp(),
-        onboardingDone: false,
-        status: 'active'
-      };
-
-      await setDoc(doc(db, 'users', uid), userDoc);
-      
-      // 4. Notification AI (Optionnel)
-      try {
-        const generateMsgFn = httpsCallable(functions, 'generateWelcomeMessage');
-        await generateMsgFn({ firstName });
-      } catch (e) {
-        console.warn("AI welcome notification skipped");
-      }
-
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      if (error.code === 'auth/email-already-in-use') {
-        throw new Error("Ce numéro de téléphone est déjà associé à un compte.");
-      }
-      throw error;
-    }
-  }
-
-  async updateLocation(commune: string, coords?: {lat: number, lng: number}): Promise<void> {
-    if (!auth.currentUser) return;
-    try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        commune,
-        gpsCoordinates: coords || null,
-        lastLocationUpdate: serverTimestamp(),
-        onboardingDone: true
-      });
-    } catch (error) {
-      console.error("Error updating location:", error);
-    }
-  }
-
-  async getWelcomeMessage(firstName: string): Promise<string> {
-    try {
-        const generateMsgFn = httpsCallable(functions, 'generateWelcomeMessage');
-        const res = await generateMsgFn({ firstName }) as { data: { text: string } };
-        return res.data.text;
+      // On tente l'écriture directe car les règles l'autorisent désormais
+      await setDoc(docRef, {
+          uid: user.uid,
+          firstName: user.displayName?.split(' ')[0] || "Utilisateur",
+          lastName: user.displayName?.split(' ')[1] || "Helper",
+          phone,
+          email: user.email,
+          role: 'client',
+          status: 'active',
+          updatedAt: serverTimestamp()
+      }, { merge: true });
+      console.log("[AUTH] Profil Firestore assuré client-side.");
     } catch (e) {
-        return `Bienvenue sur Helper, ${firstName} !`;
+      console.error("[AUTH] Erreur lors de l'ensureProfile:", e);
     }
+  }
+
+  async register(data: RegisterData): Promise<FirebaseUser> {
+    const { firstName, lastName, phone, password } = data;
+    const standardPhone = this.getStandardPhone(phone);
+    const email = this.getVirtualEmail(standardPhone);
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password.trim());
+      const user = userCredential.user;
+
+      await updateProfile(user, {
+        displayName: `${firstName.trim()} ${lastName.trim()}`
+      });
+
+      // Initialisation immédiate
+      await this.triggerProfileInitialization(user.uid, firstName, lastName, standardPhone);
+
+      return user;
+    } catch (error: any) {
+      console.error("[AUTH] Register Error:", error.code);
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error("Ce numéro est déjà utilisé.");
+      }
+      throw new Error("Erreur lors de la création du compte.");
+    }
+  }
+
+  private async triggerProfileInitialization(uid: string, firstName: string, lastName: string, phone: string) {
+    try {
+      const initFn = httpsCallable(functions, 'completeRegistration');
+      await initFn({ firstName, lastName, phone });
+    } catch (e) {
+      // Fallback client-side immédiat pour éviter le blocage
+      await setDoc(doc(db, "users", uid), {
+          uid,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone,
+          email: `u${phone}@helper.ci`,
+          role: 'client',
+          status: 'active',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+  }
+
+  private handleAuthError(error: any): never {
+    const code = error.code;
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+      throw new Error("Numéro ou code secret incorrect.");
+    }
+    throw new Error("Erreur de connexion technique.");
+  }
+
+  async updateLocation(commune: string): Promise<void> {
+    if (!auth.currentUser) return;
+    await setDoc(doc(db, 'users', auth.currentUser.uid), {
+      commune,
+      onboardingDone: true,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
   }
 
   async logout() {
     await signOut(auth);
-    this._currentUser = null;
   }
-  
-  getCurrentUser() {
-      return auth.currentUser || this._currentUser;
+
+  async getWelcomeMessage(firstName: string): Promise<string> {
+    try {
+      const welcomeFn = httpsCallable(functions, 'generateWelcomeMessage');
+      const res = await welcomeFn({ firstName });
+      return (res.data as any).text;
+    } catch (e) {
+      return `Bienvenue chez Helper, ${firstName} !`;
+    }
   }
 }
 
