@@ -8,34 +8,30 @@ if (admin.apps.length === 0) {
 
 import { createSupportTicket } from "./support";
 import { addPaymentMethod, paymentWebhook } from "./payments";
-import { createBooking, acceptBooking } from "./bookings";
+import { acceptBooking } from "./bookings";
+import { createMission } from "./missions/createMission";
 import { completeRegistration } from "./auth";
 import { generateWelcomeMessage } from "./ai";
 
-// Re-export des fonctions Callables
 export { 
     createSupportTicket, 
     addPaymentMethod, 
     paymentWebhook,
-    createBooking, 
+    createMission, // Unified naming
     acceptBooking,
     completeRegistration,
     generateWelcomeMessage
 };
 
-/**
- * TRIGGER AUTH : Création automatique du profil Firestore
- */
+// Aliases for backward compatibility during transition
+export const createBooking = createMission;
+
 export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) => {
   const db = admin.firestore();
   const uid = user.uid;
-  
-  console.log(`[TRIGGER AUTH] Initialisation profil pour : ${uid}`);
-
   try {
     const userRef = db.collection("users").doc(uid);
     const doc = await userRef.get();
-
     if (!doc.exists) {
       await userRef.set({
         uid: uid,
@@ -47,21 +43,17 @@ export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) =
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      console.log(`[TRIGGER AUTH] Profil créé avec succès pour ${uid}`);
     }
   } catch (error) {
-    console.error(`[TRIGGER AUTH] Erreur création profil ${uid}:`, error);
+    console.error(`[TRIGGER AUTH] Error:`, error);
   }
 });
 
-/**
- * TRIGGER FIRESTORE : Logique de Matching
- */
-export const onBookingCreated = functions.firestore
-  .document("bookings/{bookingId}")
+export const onMissionCreated = functions.firestore
+  .document("missions/{missionId}")
   .onCreate(async (snap, context) => {
-    const booking = snap.data();
-    if (booking.status !== 'PENDING_ASSIGNMENT') return;
-    console.log(`[MATCHING LOGIC] Nouvelle mission ${context.params.bookingId} - Notification des prestataires proches...`);
-    // Ici on pourrait ajouter l'envoi de notifications push via FCM
+    const mission = snap.data();
+    if (mission.status !== 'searching') return;
+    console.log(`[Matching] Mission ${context.params.missionId} created. Triggering provider search...`);
+    // Future: Call matchProvidersByRadius here
   });

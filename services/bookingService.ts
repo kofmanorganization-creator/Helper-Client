@@ -4,22 +4,17 @@ import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../lib/firebase';
 import { Booking, BookingState, PaymentMethod } from '../types';
 
-/**
- * Subscribes to the bookings of the currently authenticated user.
- */
 export const subscribeToUserBookings = (callback: (bookings: Booking[]) => void) => {
   const user = auth.currentUser;
   if (!user) {
     callback([]);
     return () => {};
   }
-
   const q = query(
     collection(db, 'bookings'), 
     where('clientId', '==', user.uid),
     orderBy('scheduledAt', 'desc')
   );
-
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
     const bookings: Booking[] = [];
     querySnapshot.forEach((doc) => {
@@ -27,19 +22,14 @@ export const subscribeToUserBookings = (callback: (bookings: Booking[]) => void)
     });
     callback(bookings);
   }, (error) => {
-    console.error("[BookingService] Error fetching bookings:", error);
+    console.error("[BookingService] Subscription error:", error);
     callback([]);
   });
-
   return unsubscribe;
 };
 
-/**
- * Subscribes to a single booking document for real-time updates.
- */
 export const subscribeToSingleBooking = (bookingId: string, callback: (booking: Booking | null) => void) => {
   const docRef = doc(db, 'bookings', bookingId);
-  
   const unsubscribe = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
       callback({ id: docSnap.id, ...docSnap.data() } as Booking);
@@ -47,23 +37,22 @@ export const subscribeToSingleBooking = (bookingId: string, callback: (booking: 
       callback(null);
     }
   }, (error) => {
-    console.error(`[BookingService] Error fetching booking ${bookingId}:`, error);
+    console.error(`[BookingService] Error reading booking ${bookingId}:`, error);
     callback(null);
   });
-
   return unsubscribe;
 };
 
-
 /**
- * Calls the secure Cloud Function to create a new booking.
+ * Unified Mission Creation Service.
+ * Aligns with the 'createMission' backend function.
  */
 export const createBooking = async (state: BookingState, paymentMethod: PaymentMethod): Promise<{ success: boolean; bookingId: string }> => {
     if (!auth.currentUser) throw new Error("Veuillez vous connecter pour commander.");
 
-    const createBookingFn = httpsCallable(functions, 'createBooking');
+    // Calling 'createMission' which is the production-grade entry point
+    const createMissionFn = httpsCallable(functions, 'createMission');
 
-    // Build payload carefully
     const payload = {
         serviceCategoryId: state.serviceCategory?.id,
         selectedVariantKey: state.selectedVariantKey || null,
@@ -75,31 +64,24 @@ export const createBooking = async (state: BookingState, paymentMethod: PaymentM
     };
     
     try {
-        console.log("[BookingService] Calling createBooking with payload:", payload);
-        const result = await createBookingFn(payload);
-        const data = result.data as { success: boolean; bookingId: string };
+        console.log("[BookingService] Calling createMission...");
+        const result = await createMissionFn(payload);
+        const data = result.data as { success: boolean; missionId: string; bookingId?: string };
         
-        if (!data || !data.success) {
-            throw new Error("Le serveur n'a pas pu traiter votre demande.");
+        const missionId = data.missionId || data.bookingId;
+        if (!data || !data.success || !missionId) {
+            console.error("[BookingService] Response validation failed:", data);
+            throw new Error("Échec de la création de la mission côté serveur.");
         }
         
-        return data;
+        return { success: true, bookingId: missionId };
     } catch (error: any) {
-        console.error("[BookingService] Critical Error in createBooking:", error);
+        console.error("[BookingService] Fatal Error during createMission call:", error);
         
-        // Extract specific message from Firebase HttpsError
+        // Capture detailed error messages from Cloud Functions
+        const detail = error.details ? ` (${JSON.stringify(error.details)})` : "";
         const message = error.message || "Erreur technique lors de la commande.";
         
-        // If it's a validation error, try to provide more detail if available
-        if (error.details && typeof error.details === 'object' && error.details !== null) {
-          try {
-              const details = JSON.stringify(error.details);
-              throw new Error(`${message} (${details})`);
-          } catch {
-              throw new Error(message);
-          }
-        }
-        
-        throw new Error(message);
+        throw new Error(`${message}${detail}`);
     }
 };
