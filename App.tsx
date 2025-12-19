@@ -67,11 +67,10 @@ function App() {
   }, []);
 
   /**
-   * CALCUL DU PRIX EN TEMPS RÉEL (Étapes 2, 3 et 4)
+   * CALCUL DU PRIX EN TEMPS RÉEL
    */
   useEffect(() => {
     const updatePrice = async () => {
-      // On calcule le prix si on a au moins une catégorie et qu'on est au delà de l'étape 1
       if (bookingState.step >= 2 && bookingState.serviceCategory) {
         setIsLoading(true);
         try {
@@ -98,7 +97,7 @@ function App() {
   ]);
 
   /**
-   * SOUMISSION FINALE DE LA COMMANDE
+   * SOUMISSION FINALE
    */
   const handleFinalSubmit = useCallback(async () => {
     if (!selectedPaymentMethod) {
@@ -108,27 +107,22 @@ function App() {
     
     setIsLoading(true);
     try {
-      console.log("[APP] Envoi de la commande...");
       const result = await createBooking(bookingState, selectedPaymentMethod);
-      
       if (result && result.success && result.bookingId) {
-        console.log("[APP] Commande créée avec succès:", result.bookingId);
         setActiveMissionId(result.bookingId);
         setIsBookingWizardOpen(false);
         setBookingState(initialBookingState);
-      } else {
-        throw new Error("Réponse serveur invalide");
       }
     } catch (error: any) {
       console.error("[APP] Erreur création commande:", error);
-      alert("Erreur: " + (error.message || "Impossible de créer la mission. Vérifiez votre connexion."));
+      alert("Erreur: " + (error.message || "Impossible de créer la mission."));
     } finally {
       setIsLoading(false);
     }
   }, [bookingState, selectedPaymentMethod]);
 
   /**
-   * SESSION RÉSILIENTE
+   * SESSION RÉSILIENTE & ATTENTE PROFIL SERVEUR
    */
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
@@ -141,24 +135,20 @@ function App() {
 
       if (firebaseUser) {
         setIsAuthConfirmed(true);
-        setAuthLoading(false);
-
+        // On ne coupe pas le loading tant qu'on n'a pas le document Firestore
+        // pour éviter d'afficher des pages vides ou en erreur
         const userDocRef = doc(db, "users", firebaseUser.uid);
         unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             setCurrentUser({ uid: firebaseUser.uid, ...docSnap.data() } as User);
+            setAuthLoading(false);
           } else {
-            setCurrentUser({
-              uid: firebaseUser.uid,
-              firstName: firebaseUser.displayName?.split(' ')[0] || "Utilisateur",
-              lastName: firebaseUser.displayName?.split(' ')[1] || "Helper",
-              email: firebaseUser.email || "",
-              photoUrl: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=${firebaseUser.uid}&background=007DFF&color=fff`,
-              isPremium: false
-            } as User);
+             console.log("[APP] En attente de la création du profil par le serveur...");
+             // On laisse authLoading à true pour afficher l'écran de chargement
           }
         }, (err) => {
           console.error("[APP] Erreur Sync Firestore:", err.code);
+          setAuthLoading(false); // On débloque au moins pour voir l'erreur
         });
       } else {
         setIsAuthConfirmed(false);
@@ -193,7 +183,8 @@ function App() {
                  <Loader2 className="animate-spin text-primary-500" size={64} />
                  <div className="absolute inset-0 flex items-center justify-center font-black text-white text-2xl">H</div>
             </div>
-            <p className="text-white font-bold tracking-tight">Helper</p>
+            <p className="text-white font-bold tracking-tight animate-pulse">Initialisation sécurisée...</p>
+            <p className="text-slate-500 text-xs text-center max-w-[200px]">Configuration de votre espace personnel par nos serveurs.</p>
         </div>
     );
   }
