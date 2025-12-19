@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -48,10 +49,20 @@ export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) =
   }
 });
 
-export const onMissionCreated = functions.firestore
-  .document("missions/{missionId}")
-  .onCreate(async (snap, context) => {
+/**
+ * TRIGGER FIRESTORE V2
+ * Aligné sur europe-west1
+ */
+export const onMissionCreated = onDocumentCreated(
+  {
+    region: "europe-west1", // ✅ ALIGNEMENT TOTAL
+    document: "missions/{missionId}",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
     const mission = snap.data();
     if (mission.status !== 'searching') return;
-    console.log(`[Matching] Mission ${context.params.missionId} active. Démarrage de la recherche prestataire...`);
-  });
+    console.log(`[Matching] Mission ${event.params.missionId} active. Démarrage de la recherche prestataire...`);
+  }
+);
