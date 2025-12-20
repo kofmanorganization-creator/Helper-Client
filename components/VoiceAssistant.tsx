@@ -57,26 +57,27 @@ const tools: FunctionDeclaration[] = [
 
 const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBooking, onUpdateBooking }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [, setError] = useState<string | null>(null);
-
   const audioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const inputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
   useEffect(() => {
-    if (isOpen) startSession();
-    else stopSession();
+    if (isOpen) {
+      startSession();
+    } else {
+      stopSession();
+    }
     return () => stopSession();
   }, [isOpen]);
 
   const startSession = async () => {
     try {
-      setError(null);
-      // FIX: Create a new GoogleGenAI instance right before making an API call and use process.env.API_KEY directly
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
@@ -87,20 +88,22 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
           onopen: () => {
-            const source = audioContextRef.current!.createMediaStreamSource(stream);
+            if (!audioContextRef.current) return;
+            const source = audioContextRef.current.createMediaStreamSource(stream);
             inputSourceRef.current = source;
-            const processor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+            const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
+            
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createBlob(inputData);
-              // FIX: Use sessionPromise to send data to ensure session is resolved and avoid race conditions
               sessionPromise.then(session => {
                 session.sendRealtimeInput({ media: pcmBlob });
               });
             };
+            
             source.connect(processor);
-            processor.connect(audioContextRef.current!.destination);
+            processor.connect(audioContextRef.current.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
             if (msg.toolCall) {
@@ -109,7 +112,6 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
                 else if (fc.name === 'navigate_to_page') onNavigate((fc.args as any).page);
                 else if (fc.name === 'update_booking_parameters') onUpdateBooking(fc.args);
                 
-                // FIX: Use sessionPromise to respond to the tool call
                 sessionPromise.then(session => {
                   session.sendToolResponse({
                     functionResponses: {
@@ -121,26 +123,37 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
                 });
               }
             }
+            
             const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
+            if (base64Audio && outputAudioContextRef.current) {
               setIsSpeaking(true);
               const audioData = decode(base64Audio);
-              const audioBuffer = await decodeAudioData(audioData, outputAudioContextRef.current!, 24000, 1);
-              playAudio(audioBuffer, outputAudioContextRef.current!);
+              const audioBuffer = await decodeAudioData(audioData, outputAudioContextRef.current, 24000, 1);
+              playAudio(audioBuffer, outputAudioContextRef.current);
             }
-            if (msg.serverContent?.turnComplete) setIsSpeaking(false);
+
+            if (msg.serverContent?.interrupted) {
+              sourcesRef.current.forEach(s => s.stop());
+              sourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+            }
+
+            if (msg.serverContent?.turnComplete) {
+              setIsSpeaking(false);
+            }
           },
-          onerror: () => setError("Connection error")
+          onerror: (e) => console.error("Live API Error:", e),
+          onclose: () => setIsSpeaking(false)
         },
         config: {
           responseModalities: [Modality.AUDIO],
           systemInstruction: SYSTEM_INSTRUCTION,
           tools: [{ functionDeclarations: tools }],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } }
         }
       });
     } catch (e: any) {
-      setError(e.message);
+      console.error("Session Start Error:", e);
     }
   };
 
@@ -150,6 +163,8 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
     inputSourceRef.current?.disconnect();
     audioContextRef.current?.close();
     outputAudioContextRef.current?.close();
+    sourcesRef.current.forEach(s => s.stop());
+    sourcesRef.current.clear();
     setIsSpeaking(false);
   };
 
@@ -164,12 +179,16 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
+    
     const startTime = Math.max(ctx.currentTime, nextStartTimeRef.current);
     source.start(startTime);
     nextStartTimeRef.current = startTime + buffer.duration;
+    
+    sourcesRef.current.add(source);
+    source.onended = () => sourcesRef.current.delete(source);
   };
 
-  const decodeAudioData = async (data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number) => {
+  async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
     const dataInt16 = new Int16Array(data.buffer);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
@@ -178,7 +197,7 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
       for (let i = 0; i < frameCount; i++) channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
     return buffer;
-  };
+  }
 
   function encode(bytes: Uint8Array) {
     let binary = '';
@@ -199,7 +218,7 @@ const VoiceAssistant: React.FC<any> = ({ isOpen, onClose, onNavigate, onStartBoo
     <div className="fixed top-6 left-0 right-0 z-[60] flex justify-center pointer-events-none animate-fade-in-down">
       <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-xl border border-slate-700 px-6 py-3 rounded-full flex items-center space-x-4 shadow-2xl">
         <div className={`w-3 h-3 rounded-full ${isSpeaking ? 'bg-indigo-500 animate-pulse' : 'bg-primary-500'}`}></div>
-        <span className="text-white text-xs font-bold">{isSpeaking ? 'Helper Assistant...' : 'Listening...'}</span>
+        <span className="text-white text-xs font-bold">{isSpeaking ? 'Helper Assistant...' : 'Assistant à l\'écoute...'}</span>
         <button onClick={onClose} className="p-1 bg-white/10 rounded-full hover:bg-white/20"><PhoneOff size={14} /></button>
       </div>
     </div>

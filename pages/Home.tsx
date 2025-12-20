@@ -1,9 +1,8 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { SERVICES_CATEGORIES } from '../constants';
 import { ServiceCategory, Booking, User } from '../types';
-import { Bell, Clock, Star, Shield, Search, X, Sparkles, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { Bell, Clock, Star, Shield, Search, X, Sparkles, TrendingUp, ArrowUpRight, ShieldCheck, Zap, CheckCircle } from 'lucide-react';
 import { subscribeToUserBookings } from '../services/bookingService';
 
 interface HomeProps {
@@ -322,6 +321,39 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
             <span className="tracking-wide">Plus de services</span>
             <span className="ml-2 transform group-hover:translate-x-1 transition-transform opacity-70">&lt;&lt;</span>
         </button>
+      </div>
+
+      {/* Nos Engagements Section - Alignée horizontalement */}
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2 px-1">
+            <CheckCircle size={18} className="text-green-400" />
+            <h2 className="text-white font-bold text-lg">Nos Engagements</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
+                <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400 mb-2 group-hover:scale-110 transition-transform">
+                    <ShieldCheck size={20} />
+                </div>
+                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Sécurité</h3>
+                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Helpers vérifiés & missions assurées.</p>
+            </div>
+
+            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
+                <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-400 mb-2 group-hover:scale-110 transition-transform">
+                    <Star size={20} />
+                </div>
+                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Qualité</h3>
+                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Standards stricts & satisfaction garantie.</p>
+            </div>
+
+            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
+                <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center text-primary-400 mb-2 group-hover:scale-110 transition-transform">
+                    <Zap size={20} />
+                </div>
+                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Rapidité</h3>
+                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Intervention en moins de 60 min.</p>
+            </div>
+        </div>
       </div>
 
       {/* Dashboard Widgets (Active Booking & Stats) */}

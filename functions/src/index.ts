@@ -1,3 +1,4 @@
+
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
@@ -23,16 +24,21 @@ export {
     generateWelcomeMessage
 };
 
-// Alias pour la compatibilité avec l'ancien code client si nécessaire
+// Alias de compatibilité
 export const createBooking = createMission;
 
-export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) => {
+/**
+ * TRIGGER AUTH : Initialisation du profil utilisateur
+ */
+export const onUserCreateTrigger = functions.region("europe-west1").auth.user().onCreate(async (user) => {
   const db = admin.firestore();
   const uid = user.uid;
+  
   try {
     const userRef = db.collection("users").doc(uid);
-    const doc = await userRef.get();
-    if (!doc.exists) {
+    const docSnap = await userRef.get();
+    
+    if (!docSnap.exists) {
       await userRef.set({
         uid: uid,
         email: user.email || `u${uid}@helper.ci`,
@@ -45,17 +51,16 @@ export const onUserCreateTrigger = functions.auth.user().onCreate(async (user) =
       });
     }
   } catch (error) {
-    console.error(`[TRIGGER AUTH] Error:`, error);
+    console.error(`[TRIGGER AUTH] Erreur:`, error);
   }
 });
 
 /**
  * TRIGGER FIRESTORE V2
- * Aligné sur europe-west1
  */
 export const onMissionCreated = onDocumentCreated(
   {
-    region: "europe-west1", // ✅ ALIGNEMENT TOTAL
+    region: "europe-west1",
     document: "missions/{missionId}",
   },
   async (event) => {
@@ -63,6 +68,6 @@ export const onMissionCreated = onDocumentCreated(
     if (!snap) return;
     const mission = snap.data();
     if (mission.status !== 'searching') return;
-    console.log(`[Matching] Mission ${event.params.missionId} active. Démarrage de la recherche prestataire...`);
+    console.log(`[Matching] Nouvelle mission : ${event.params.missionId}`);
   }
 );

@@ -14,54 +14,86 @@ interface MissionLiveProps {
 const MissionLive: React.FC<MissionLiveProps> = ({ missionId, onMissionComplete }) => {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
     if (!missionId) return;
+    
+    setIsInitializing(true);
     const unsubscribe = subscribeToSingleBooking(missionId, (data) => {
-      if (data) setBooking(data);
+      if (data) {
+        setBooking(data);
+        setIsInitializing(false);
+      }
       if (data?.status === 'completed' || data?.status === 'reviewed') {
           onMissionComplete();
       }
     });
-    return () => unsubscribe();
+
+    // Timeout de sécurité si vraiment rien ne remonte après 10s
+    const timeout = setTimeout(() => {
+      if (isInitializing) setIsInitializing(false);
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [missionId]);
 
-  if (!booking) {
+  if (isInitializing && !booking) {
       return (
-          <div className="h-screen bg-slate-900 flex flex-col items-center justify-center">
-              <Loader2 className="animate-spin text-primary-500" size={32} />
-              <p className="text-slate-500 mt-4 text-xs font-bold uppercase tracking-widest">Initialisation de la mission...</p>
+          <div className="h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
+              <div className="relative mb-8">
+                  <div className="absolute inset-0 bg-primary-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+                  <Loader2 className="animate-spin text-primary-500 relative" size={48} />
+              </div>
+              <h2 className="text-white font-bold text-lg">Sécurisation de la mission</h2>
+              <p className="text-slate-500 mt-2 text-xs uppercase tracking-widest leading-relaxed">
+                  Nous connectons votre demande au réseau Helper...
+              </p>
           </div>
       );
   }
 
-  // 1. ATTENTE PAIEMENT (FLUX ONLINE)
-  if (booking.status === 'pending_payment') {
+  // Fallback si vraiment aucun doc n'est trouvé (cas rare après retry)
+  if (!booking) {
+      return (
+          <div className="h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
+              <AlertCircle size={48} className="text-red-500 mb-4" />
+              <h2 className="text-white font-bold">Oups, un petit délai...</h2>
+              <p className="text-slate-500 text-sm mt-2">La mission a été créée mais tarde à s'afficher. Vérifiez "Mes Réservations".</p>
+              <button onClick={() => window.location.reload()} className="mt-6 px-6 py-3 bg-slate-800 rounded-xl text-white text-sm">Actualiser</button>
+          </div>
+      );
+  }
+
+  // 1. ATTENTE PAIEMENT
+  if (booking.status === 'pending_payment' || booking.status === 'AWAITING_PAYMENT') {
     return (
         <div className="h-screen bg-slate-900 flex flex-col items-center justify-center text-center p-8 animate-fade-in">
             <div className="w-20 h-20 bg-primary-500/10 rounded-full flex items-center justify-center border-4 border-primary-500/20 mb-6">
                 <Wallet size={40} className="text-primary-400" />
             </div>
             <h2 className="text-xl font-bold text-white">Validation du Paiement</h2>
-            <p className="text-slate-400 mt-2 text-sm">Veuillez finaliser la transaction sur votre mobile pour déclencher la recherche.</p>
+            <p className="text-slate-400 mt-2 text-sm">Finalisez la transaction sur votre mobile pour lancer la recherche.</p>
             <div className="mt-8 flex items-center space-x-3 bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
                 <Loader2 className="animate-spin text-primary-400" size={16} />
-                <span className="text-[10px] font-bold text-slate-300 uppercase">En attente...</span>
+                <span className="text-[10px] font-bold text-slate-300 uppercase">En attente de confirmation...</span>
             </div>
         </div>
     );
   }
 
-  // 2. RECHERCHE PRESTATAIRE (RADAR)
+  // 2. RECHERCHE PRESTATAIRE
   if (booking.status === 'searching' || booking.status === 'PENDING_ASSIGNMENT') {
     return (
         <div className="h-screen bg-slate-900 flex flex-col items-center justify-center relative overflow-hidden animate-fade-in">
             <MatchingRadar onFound={() => {}} />
             <div className="absolute bottom-12 left-0 right-0 px-6 text-center animate-pulse">
                 <p className="text-primary-400 text-xs font-bold uppercase tracking-widest flex items-center justify-center">
-                   <Clock size={12} className="mr-2" /> Matching intelligent Helper
+                   <Clock size={12} className="mr-2" /> Matching IA en cours
                 </p>
-                <p className="text-slate-500 text-[10px] mt-1">Notification des prestataires à proximité...</p>
             </div>
         </div>
     );
@@ -73,7 +105,7 @@ const MissionLive: React.FC<MissionLiveProps> = ({ missionId, onMissionComplete 
       'arrived': 'Prestataire sur place',
       'in_progress': 'Mission en cours',
       'completed_wait': 'Mission terminée',
-  }[booking.status.toLowerCase()] || 'Actualisation...';
+  }[booking.status.toLowerCase()] || 'Mise à jour...';
 
   return (
     <div className="min-h-screen bg-slate-900 relative pb-32 animate-fade-in">
@@ -106,16 +138,16 @@ const MissionLive: React.FC<MissionLiveProps> = ({ missionId, onMissionComplete 
                 {booking.status === 'completed_wait' ? (
                     <div className="bg-primary-600 p-6 rounded-3xl text-center space-y-4 shadow-xl">
                         <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto"><QrCode className="text-white" size={28} /></div>
-                        <h3 className="text-lg font-bold text-white">Confirmer la fin de mission</h3>
-                        <p className="text-primary-100 text-[10px]">Scannez le code du prestataire pour libérer le règlement.</p>
-                        <button onClick={() => setShowScanner(true)} className="w-full py-4 bg-white text-primary-600 font-bold rounded-2xl">SCANNER LE QR CODE</button>
+                        <h3 className="text-lg font-bold text-white">Confirmer la fin</h3>
+                        <p className="text-primary-100 text-[10px]">Scannez le code du prestataire.</p>
+                        <button onClick={() => setShowScanner(true)} className="w-full py-4 bg-white text-primary-600 font-bold rounded-2xl shadow-xl active:scale-95 transition-transform">SCANNER LE CODE</button>
                     </div>
                 ) : (
                     <div className="bg-slate-800/50 p-5 rounded-2xl border border-slate-700 flex items-center space-x-4">
                         <div className="p-3 bg-primary-500/10 rounded-xl text-primary-400"><Navigation size={20} /></div>
                         <div>
-                            <p className="text-white font-bold text-sm">Suivi en temps réel</p>
-                            <p className="text-xs text-slate-500">Le prestataire arrive à votre domicile.</p>
+                            <p className="text-white font-bold text-sm">Suivi temps réel</p>
+                            <p className="text-xs text-slate-500">Arrivée estimée dans quelques minutes.</p>
                         </div>
                     </div>
                 )}
@@ -123,8 +155,8 @@ const MissionLive: React.FC<MissionLiveProps> = ({ missionId, onMissionComplete 
             
             <div className="mt-12 pt-6 border-t border-slate-800">
                 <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center text-slate-500 font-bold uppercase tracking-widest"><AlertCircle size={14} className="mr-2" /> {booking.paymentMethod} Payment</div>
-                    <span className="text-white font-bold bg-slate-800 px-3 py-1 rounded-full">{booking.totalAmount.toLocaleString()} F</span>
+                    <div className="flex items-center text-slate-500 font-bold uppercase tracking-widest"><AlertCircle size={14} className="mr-2" /> Paiement {booking.paymentMethod}</div>
+                    <span className="text-white font-bold bg-slate-800 px-3 py-1 rounded-full">{booking.totalAmount?.toLocaleString()} F</span>
                 </div>
             </div>
         </div>

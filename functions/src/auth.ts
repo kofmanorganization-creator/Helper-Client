@@ -1,4 +1,3 @@
-
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { z } from "zod";
@@ -15,16 +14,16 @@ const RegistrationSchema = z.object({
 
 /**
  * Finalise l'inscription (Callable).
- * Utilisé par le client juste après l'auth.
+ * Enrichit le profil utilisateur créé par le trigger Auth.
  */
 export const completeRegistration = functions.region("europe-west1").https.onCall(async (data, context) => {
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Auth requis.");
+        throw new functions.https.HttpsError("unauthenticated", "Utilisateur non authentifié.");
     }
 
     const parsed = RegistrationSchema.safeParse(data);
     if (!parsed.success) {
-        throw new functions.https.HttpsError("invalid-argument", "Données invalides.");
+        throw new functions.https.HttpsError("invalid-argument", "Données d'inscription invalides.");
     }
 
     const { uid } = context.auth;
@@ -33,22 +32,23 @@ export const completeRegistration = functions.region("europe-west1").https.onCal
 
     try {
         const db = admin.firestore();
-        console.log(`[AUTH-CALL] Finalisation profil Firestore pour : ${uid}`);
+        const userRef = db.collection("users").doc(uid);
 
-        // On utilise doc().set({ ... }, { merge: true }) pour être idempotent
-        // Si le trigger onCreate a déjà créé le doc, on ne fait que merger les noms
-        await db.collection("users").doc(uid).set({
+        console.log(`[AUTH-CALL] Finalisation profil métier pour : ${uid}`);
+
+        // On utilise set avec merge: true pour ne pas écraser les champs créés par le trigger Auth (comme le rôle)
+        await userRef.set({
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: cleanPhone,
             photoUrl: `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=007DFF&color=fff`,
+            onboardingDone: false, // Sera passé à true après le choix de la commune
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         return { success: true };
     } catch (error: any) {
         console.error("[AUTH-CALL] Erreur lors de la finalisation :", error);
-        // On ne throw pas d'erreur interne car le trigger onCreate assurera la survie du doc
-        return { success: false, error: "Initialisation asynchrone en cours." };
+        throw new functions.https.HttpsError("internal", "Erreur lors de la mise à jour du profil.");
     }
 });
