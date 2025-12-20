@@ -14,7 +14,8 @@ export const createMission = onCall(
     region: "europe-west1", // ✅ ALIGNEMENT TOTAL
     timeoutSeconds: 30,
   },
-  async ({ data, auth }) => {
+  async (request) => {
+    const { data, auth } = request;
     try {
       if (!auth) {
         throw new HttpsError("unauthenticated", "Utilisateur non connecté");

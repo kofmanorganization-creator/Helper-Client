@@ -1,4 +1,3 @@
-
 import { collection, query, where, onSnapshot, orderBy, doc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../lib/firebase';
@@ -24,14 +23,13 @@ export const subscribeToUserBookings = (callback: (bookings: Booking[]) => void)
 
 /**
  * Abonnement à une mission spécifique (Dashboard Live).
- * Gère le fallback entre les collections 'missions' et 'bookings'.
  */
 export const subscribeToSingleBooking = (id: string, callback: (b: Booking | null) => void) => {
   return onSnapshot(doc(db, 'missions', id), (snap) => {
     if (snap.exists()) {
       callback({ id: snap.id, ...snap.data() } as Booking);
     } else {
-      // Fallback si la réplication batch n'est pas encore finie
+      // Fallback vers bookings si pas encore dans missions
       onSnapshot(doc(db, 'bookings', id), (snap2) => {
         if (snap2.exists()) callback({ id: snap2.id, ...snap2.data() } as Booking);
       });
@@ -43,14 +41,14 @@ export const subscribeToSingleBooking = (id: string, callback: (b: Booking | nul
 
 /**
  * Création d'une mission via Cloud Function.
- * Centralise l'appel et normalise les sorties.
+ * 🔥 REGION ALIGNÉE : europe-west1 via l'import de 'functions'
  */
 export const createBooking = async (state: BookingState, method: PaymentMethod): Promise<{ success: boolean, bookingId: string }> => {
   if (!auth.currentUser) throw new Error("Veuillez vous connecter pour commander.");
   
+  // ✅ APPEL À LA CLOUD FUNCTION (Région europe-west1 héritée de lib/firebase.ts)
   const createMissionFn = httpsCallable(functions, 'createMission');
   
-  // Normalisation forcée côté client pour éviter tout undefined envoyé au serveur
   const payload = {
     serviceCategoryId: state.serviceCategory?.id || null,
     selectedVariantKey: state.selectedVariantKey || null,
@@ -66,28 +64,17 @@ export const createBooking = async (state: BookingState, method: PaymentMethod):
   }
 
   try {
-    console.log("[BookingService] Envoi de la commande nucléaire...", payload);
+    console.log("[BookingService] Envoi createMission vers europe-west1...", payload);
     const result = await createMissionFn(payload);
     const data = result.data as any;
     
     if (data && data.success && data.missionId) {
-      console.log("[BookingService] Succès serveur, ID mission:", data.missionId);
       return { success: true, bookingId: data.missionId };
     }
     
     throw new Error("Le serveur n'a pas renvoyé d'identifiant de mission.");
   } catch (error: any) {
-    console.error("[BookingService] ERREUR SERVEUR DETECTEE:", error);
-    
-    // Extraction d'un message d'erreur compréhensible
-    let message = "Une erreur est survenue lors du traitement de votre commande.";
-    if (error.message) message = error.message;
-    
-    // Si l'erreur est de type HttpsError, elle peut contenir des détails utiles
-    if (error.details && typeof error.details === 'object') {
-        console.error("[BookingService] Détails techniques de l'erreur:", error.details);
-    }
-    
-    throw new Error(message);
+    console.error("[BookingService] Erreur appel Cloud Function:", error);
+    throw new Error(error.message || "Erreur lors du traitement de votre commande.");
   }
 };
