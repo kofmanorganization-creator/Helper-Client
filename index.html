@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
   <head>
@@ -43,6 +44,23 @@
       }
       @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
       .animate-fade-in { animation: fade-in 0.3s ease-out; }
+
+      /* Animation Koffmann Group (5 sec cycle) */
+      @keyframes koffmann-loop {
+        0%, 100% { color: #F59E0B; } /* Orange Doré */
+        25% { color: #10B981; }      /* Vert */
+        50% { color: #3B82F6; }      /* Bleu */
+        75% { color: #EF4444; }      /* Rouge Dynamique */
+      }
+      .dynamic-koffmann {
+        animation: koffmann-loop 5s infinite;
+        font-weight: 900;
+        display: inline-block;
+        transition: transform 0.3s ease;
+      }
+      .dynamic-koffmann:hover {
+        transform: scale(1.05);
+      }
     </style>
     <script type="importmap">
 {

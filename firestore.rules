@@ -31,7 +31,7 @@ service cloud.firestore {
       }
     }
 
-    // Inbox Prestataire (Architecture Distribution Nucléaire)
+    // Inbox Prestataire
     match /provider_inbox/{providerId} {
       allow read: if isOwner(providerId) || isAdmin();
       match /missions/{missionId} {
@@ -58,26 +58,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Missions & Bookings
+    // Missions & Bookings (Correctif de Robustesse pour ZsaQRhztczjhkHV01Hym)
     match /missions/{id} {
-      allow get: if isAuthenticated() && (
+      allow get, list: if isAuthenticated() && (
         isAdmin() || 
         (resource == null) || 
         resource.data.clientId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid
+        (resource.data.get('providerId', '') == request.auth.uid)
       );
-      allow list: if isAuthenticated() && (isAdmin() || resource.data.clientId == request.auth.uid);
       allow write: if isAuthenticated();
     }
 
     match /bookings/{id} {
-      allow get: if isAuthenticated() && (
+      allow get, list: if isAuthenticated() && (
         isAdmin() || 
         (resource == null) || 
         resource.data.clientId == request.auth.uid || 
-        resource.data.providerId == request.auth.uid
+        (resource.data.get('providerId', '') == request.auth.uid)
       );
-      allow list: if isAuthenticated() && (isAdmin() || resource.data.clientId == request.auth.uid);
       allow write: if isAuthenticated();
     }
 

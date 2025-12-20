@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, CreditCard, Shield, HelpCircle, LogOut, ChevronRight, Wallet, History, CheckCircle2, XCircle, Calendar, Repeat, Loader2 } from 'lucide-react';
 import GlassContainer from '../components/profile/GlassContainer';
@@ -38,7 +37,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
   const handleLogout = async () => {
     if (window.confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
         await authService.logout();
-        // The App component will handle the redirection to the onboarding screen
     }
   };
 
@@ -49,7 +47,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
     { icon: HelpCircle, label: 'Aide & Support', badge: '', view: 'help' as ProfileView },
   ];
 
-  // Render Sub-pages
   if (currentView === 'preferences') return <PreferencesPage onBack={() => setCurrentView('main')} />;
   if (currentView === 'payments') return <PaymentMethodsPage onBack={() => setCurrentView('main')} />;
   if (currentView === 'security') return <SecurityPage onBack={() => setCurrentView('main')} />;
@@ -59,7 +56,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
       return <div className="p-10 text-center"><Loader2 className="animate-spin" /></div>;
   }
 
-  // Render Main Profile
   return (
     <div className="animate-fade-in p-6 pb-32 space-y-8">
       <div className="flex items-center justify-between">
@@ -73,7 +69,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
          </button>
       </div>
 
-      {/* User Card */}
       <div className="flex flex-col items-center text-center space-y-3">
         <div className="relative">
              <div className="absolute inset-0 bg-primary-500 rounded-full blur-lg opacity-30"></div>
@@ -90,7 +85,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Wallet Widget */}
       <div className="bg-gradient-to-br from-indigo-600 to-primary-700 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="relative z-10 flex items-center justify-between">
@@ -107,7 +101,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
         </button>
       </div>
 
-      {/* Mission History Section */}
       <div className="space-y-4">
         <h3 className="text-white font-bold text-lg flex items-center px-1">
             <History size={20} className="mr-2 text-primary-400" />
@@ -153,14 +146,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
             ) : (
                 <p className="text-sm text-slate-500 text-center py-4">Aucune mission passée.</p>
             )}
-            
-            <button className="w-full py-2 text-xs text-slate-500 font-medium hover:text-white transition-colors">
-                Voir tout l'historique
-            </button>
         </div>
       </div>
 
-      {/* Settings List */}
       <div className="space-y-3">
         {menuItems.map((item, index) => (
             <GlassContainer 
@@ -179,7 +167,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
         ))}
       </div>
 
-      {/* Logout Button */}
       <div className="pt-4">
         <button
             onClick={handleLogout}
@@ -190,37 +177,12 @@ const Profile: React.FC<ProfileProps> = ({ currentUser }) => {
         </button>
       </div>
 
-      {/* Koffmann Group Signature */}
-      <div className="text-center text-xs text-slate-500 mt-6">
-        Helper initié par{' '}
-        <a
-          href="https://www.koffmann.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-bold dynamic-gradient"
-        >
-          Koffmann Group
-        </a>
+      {/* Signature Officielle Dynamique */}
+      <div className="text-center opacity-90 pt-6 pb-4">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+          HELPER Propulsé par <a href="http://www.koffmann.com" target="_blank" rel="noopener noreferrer" className="dynamic-koffmann">Koffmann Group</a>
+        </p>
       </div>
-
-      <style>{`
-        @keyframes gradient-animation {
-          0% { background-position: 0% 50%; }
-          25% { background-position: 100% 50%; }
-          50% { background-position: 200% 50%; }
-          75% { background-position: 300% 50%; }
-          100% { background-position: 400% 50%; }
-        }
-
-        .dynamic-gradient {
-          background: linear-gradient(90deg, #F59E0B, #10B981, #3B82F6, #EF4444, #F59E0B);
-          background-size: 400% 100%;
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          animation: gradient-animation 5s ease infinite;
-        }
-      `}</style>
     </div>
   );
 };

@@ -10,44 +10,32 @@ export const subscribeToSingleBooking = (id: string, callback: (b: Booking | nul
   let unsubscribe: (() => void) | null = null;
   let isChecking = true;
   let retryCount = 0;
-  const MAX_RETRIES = 3; // Réduit à 3 pour éviter la fatigue système
+  const MAX_RETRIES = 3;
 
-  const startLiveListener = (collectionName: 'missions' | 'bookings') => {
+  const startLiveListener = () => {
     if (!isChecking) return;
-    
     if (unsubscribe) unsubscribe();
 
-    unsubscribe = onSnapshot(doc(db, collectionName, id), (snap) => {
+    // 🧨 ACTION 3 : On n'écoute QUE bookings/
+    unsubscribe = onSnapshot(doc(db, 'bookings', id), (snap) => {
       if (snap.exists()) {
         callback({ id: snap.id, ...snap.data() } as Booking);
       }
     }, (err) => {
-      console.warn(`[Helper-Sync] Listener Error for ${id} in ${collectionName}:`, err.message);
-      if (err.code === 'permission-denied') {
-        isChecking = false; // 🛑 Arrêt immédiat
-      }
+      if (err.code === 'permission-denied') isChecking = false;
     });
   };
 
   const pollExistence = async () => {
     if (!isChecking) return;
-
     try {
-      const snap = await getDoc(doc(db, 'missions', id));
-      if (snap.exists()) {
-        callback({ id: snap.id, ...snap.data() } as Booking);
-        startLiveListener('missions');
-        return;
-      }
-
       const bSnap = await getDoc(doc(db, 'bookings', id));
       if (bSnap.exists()) {
         callback({ id: bSnap.id, ...bSnap.data() } as Booking);
-        startLiveListener('bookings');
+        startLiveListener();
         return;
       }
 
-      // Retry limité pour not-found
       if (retryCount < MAX_RETRIES) {
         retryCount++;
         setTimeout(pollExistence, 2000);
@@ -55,11 +43,9 @@ export const subscribeToSingleBooking = (id: string, callback: (b: Booking | nul
         isChecking = false;
         callback(null);
       }
-
     } catch (e: any) {
       if (e.code === 'permission-denied') {
-        console.error("[Helper-Sync] Permission refusée durant le polling. Arrêt.");
-        isChecking = false; // 🛑 Arrêt immédiat
+        isChecking = false;
         callback(null);
       } else if (retryCount < MAX_RETRIES) {
         retryCount++;
@@ -69,7 +55,6 @@ export const subscribeToSingleBooking = (id: string, callback: (b: Booking | nul
   };
 
   pollExistence();
-
   return () => {
     isChecking = false;
     if (unsubscribe) unsubscribe();
@@ -115,8 +100,8 @@ export const createBooking = async (state: BookingState, method: PaymentMethod):
     const result = await createMissionFn(payload);
     const data = result.data as any;
     
-    if (data && data.success && (data.missionId || data.bookingId)) {
-      return { success: true, bookingId: data.missionId || data.bookingId };
+    if (data && data.success && data.bookingId) {
+      return { success: true, bookingId: data.bookingId };
     }
     
     throw new Error(data?.message || "Échec de création serveur.");

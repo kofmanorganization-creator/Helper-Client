@@ -163,7 +163,7 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
         </div>
       </button>
 
-      {/* Section Helpers d'Élite (Fiches Profils Dynamiques) */}
+      {/* Section Helpers d'Élite */}
       <div className="space-y-4 mt-8">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center space-x-2">
@@ -171,8 +171,9 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
             <h2 className="text-white font-black text-xl tracking-tight">Nos Helpers d'Élite</h2>
           </div>
           <div className="flex items-center bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
-             <Star size={10} className="text-amber-500 fill-amber-500 mr-1.5" />
-             <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Mieux notées</span>
+             <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center">
+               <Star size={10} className="fill-amber-500 mr-1.5" /> Mieux notées
+             </span>
           </div>
         </div>
 
@@ -185,12 +186,10 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
               <img src={maid.photoUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={maid.firstName} />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/20 to-transparent"></div>
               
-              {/* Badge Certifié */}
               <div className="absolute top-4 left-4 bg-amber-500/90 backdrop-blur-md rounded-xl p-2 shadow-lg border border-white/20">
                 <Shield size={16} className="text-white" />
               </div>
 
-              {/* Infos Bulle Inférieure */}
               <div className="absolute bottom-0 left-0 right-0 p-5 space-y-2">
                 <div className="flex items-center justify-between">
                    <h4 className="text-white font-black text-lg tracking-tight">{maid.firstName}</h4>
@@ -231,7 +230,7 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
         </div>
       </div>
 
-      {/* Grille Express - Rectangles Verticaux Immersifs */}
+      {/* Grille Express - Carrés Immersifs & Colorés */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-1">
             <h2 className="text-white font-black text-xl tracking-tight">Services Express</h2>
@@ -240,28 +239,34 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
             </button>
         </div>
         <div className="grid grid-cols-3 gap-4">
-            {expressServices.map((category) => (
+            {expressServices.map((category, index) => (
                 <button
                     key={category.id}
                     onClick={() => onStartNewBooking(category)}
-                    className="relative h-48 rounded-[2.5rem] bg-slate-800/40 border border-slate-700/30 overflow-hidden transition-all group active:scale-95 shadow-lg flex flex-col items-center justify-center p-4 text-center"
+                    className={`relative aspect-square rounded-[2rem] bg-slate-800/40 border border-slate-700/30 overflow-hidden transition-all duration-500 group active:scale-95 shadow-lg flex flex-col items-center justify-center p-4 text-center
+                      hover:scale-105 hover:shadow-xl
+                      ${index % 3 === 0 ? 'hover:bg-amber-500/20 hover:border-amber-500/50 hover:shadow-amber-500/10' :
+                        index % 3 === 1 ? 'hover:bg-green-500/20 hover:border-green-500/50 hover:shadow-green-500/10' :
+                        'hover:bg-primary-500/20 hover:border-primary-500/50 hover:shadow-primary-500/10'}
+                    `}
                 >
-                    {/* Fond décoratif immersif */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-900/20 to-slate-900/90 z-0"></div>
-                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-primary-500/10 rounded-full blur-xl group-hover:bg-primary-500/20 transition-colors"></div>
-                    
-                    <div className="relative z-10 flex flex-col items-center space-y-4">
-                        <div className="w-14 h-14 rounded-2xl bg-slate-900/60 backdrop-blur-md flex items-center justify-center text-3xl shadow-xl border border-white/5 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500">
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-900/10 to-slate-900/80 z-0"></div>
+                    <div className="relative z-10 flex flex-col items-center space-y-3">
+                        <div className={`w-12 h-12 rounded-2xl bg-slate-900/60 backdrop-blur-md flex items-center justify-center text-3xl shadow-xl border border-white/5 group-hover:scale-110 group-hover:-translate-y-2 transition-all duration-500
+                          ${index % 3 === 0 ? 'group-hover:text-amber-400 group-hover:shadow-amber-500/40' :
+                            index % 3 === 1 ? 'group-hover:text-green-400 group-hover:shadow-green-500/40' :
+                            'group-hover:text-primary-400 group-hover:shadow-primary-500/40'}
+                        `}>
                             {category.icon}
                         </div>
                         <div className="space-y-1">
-                            <h3 className="font-black text-white text-[10px] uppercase tracking-tighter leading-tight drop-shadow-md">{category.name}</h3>
-                            <div className="h-0.5 w-4 bg-primary-500 mx-auto rounded-full scale-0 group-hover:scale-100 transition-transform duration-500"></div>
+                            <h3 className="font-black text-white text-[10px] uppercase tracking-tighter leading-tight drop-shadow-md transition-colors">
+                              {category.name}
+                            </h3>
+                            <div className={`h-0.5 w-4 mx-auto rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-center
+                              ${index % 3 === 0 ? 'bg-amber-500' : index % 3 === 1 ? 'bg-green-500' : 'bg-primary-500'}
+                            `}></div>
                         </div>
-                    </div>
-
-                    <div className="absolute bottom-3 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10">
-                        <span className="text-[8px] font-black text-primary-400 uppercase tracking-widest">Réserver</span>
                     </div>
                 </button>
             ))}
@@ -306,8 +311,11 @@ const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
           </div>
       )}
 
-      <div className="text-center opacity-30 pt-8">
-        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Propelled by Koffmann AI</p>
+      {/* Signature Officielle */}
+      <div className="text-center opacity-80 pt-8 pb-4">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+          HELPER Propulsé par <a href="http://www.koffmann.com" target="_blank" rel="noopener noreferrer" className="dynamic-koffmann">Koffmann Group</a>
+        </p>
       </div>
       
     </div>

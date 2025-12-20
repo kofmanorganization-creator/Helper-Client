@@ -1,63 +1,83 @@
 
-import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { User } from "../types";
 
 /**
- * HOOK OFFICIEL useUserProfile.ts
- * Architecture ANTI-GhostProtocol :
- * 1. Détecte l'état Auth.
- * 2. Tente un chargement UNIQUE du profil Firestore.
- * 3. En cas de permission-denied ou document absent, renvoie une erreur explicite SANS retry.
+ * HOOK useUserProfile.ts (Version 4.0 - GHOST PROTOCOL)
+ * Architecture anti-Accès Restreint :
+ * Stoppe l'écoute si "permission-denied" est reçu (STOP RETRY).
  */
 export function useUserProfile() {
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+  
+  // Utilisation d'un ref pour le désabonnement afin de pouvoir le couper depuis l'erreur
+  const unsubscribeProfileRef = useRef<(() => void) | null>(null);
+
+  const refresh = useCallback(() => {
+    // Force un rechargement complet via App.tsx
+    window.location.href = window.location.origin;
+  }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setProfile(null);
         setError("NOT_AUTHENTICATED");
         setLoading(false);
+        if (unsubscribeProfileRef.current) unsubscribeProfileRef.current();
         return;
       }
 
       setLoading(true);
       setError(null);
 
-      try {
-        const ref = doc(db, "users", user.uid);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          console.warn("[GhostProtocol] Profil non prêt — attente backend");
-          setError("PROFILE_NOT_READY");
+      const userDocRef = doc(db, "users", user.uid);
+      
+      // On snapshot avec gestion d'erreur Ghost
+      unsubscribeProfileRef.current = onSnapshot(
+        userDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setProfile({ uid: user.uid, ...data } as User);
+            setError(null);
+            setLoading(false);
+            console.info("[GhostProtocol] Profil validé.");
+          } else {
+            // Le document n'existe pas encore
+            setError("PROFILE_NOT_READY");
+            setLoading(false);
+          }
+        },
+        (err) => {
+          // ☢️ [GhostProtocol] permission-denied → STOP RETRY IMMÉDIAT
+          if (err.code === "permission-denied") {
+            console.error("[GhostProtocol] Accès interdit au profil. Désactivation du listener.");
+            if (unsubscribeProfileRef.current) {
+              unsubscribeProfileRef.current();
+              unsubscribeProfileRef.current = null;
+            }
+            setError("PROFILE_FORBIDDEN");
+          } else {
+            console.error("[GhostProtocol] Erreur inattendue:", err);
+            setError("UNKNOWN_ERROR");
+          }
           setLoading(false);
-          return;
         }
-
-        const data = snap.data();
-        setProfile({ uid: user.uid, ...data } as User);
-        console.info("[AUTH] Profil utilisateur chargé");
-        setLoading(false);
-      } catch (e: any) {
-        if (e.code === "permission-denied") {
-          console.error("[GhostProtocol] permission-denied → STOP RETRY");
-          setError("PROFILE_FORBIDDEN");
-        } else {
-          console.error("[GhostProtocol] Erreur inconnue lors du chargement du profil:", e);
-          setError("UNKNOWN_ERROR");
-        }
-        setLoading(false);
-      }
+      );
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfileRef.current) unsubscribeProfileRef.current();
+    };
+  }, [retryTrigger]);
 
-  return { profile, loading, error };
+  return { profile, loading, error, refresh };
 }

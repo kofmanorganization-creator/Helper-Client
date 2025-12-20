@@ -43,7 +43,6 @@ const initialBookingState: BookingState = {
   payout: null,
 };
 
-// Extension de TabView pour l'admin
 type ExtendedTabView = TabView | 'admin';
 
 function App() {
@@ -67,7 +66,6 @@ function App() {
     };
   }, []);
 
-  // Sync pricing
   useEffect(() => {
     const updatePrice = async () => {
       if (bookingState.step >= 2 && bookingState.serviceCategory) {
@@ -125,23 +123,36 @@ function App() {
     setIsBookingWizardOpen(true);
   };
 
+  const handleSystemRefresh = () => {
+    // Force une redirection vers l'origine et un rechargement complet
+    window.location.href = window.location.origin;
+  };
+
   if (authLoading) return <RetryLoader message="Helper sécurise votre connexion..." />;
   if (authError === 'NOT_AUTHENTICATED') return <Onboarding />;
   
   if (authError === 'PROFILE_NOT_READY' || authError === 'PROFILE_FORBIDDEN') {
       return (
-        <div className="h-screen w-full bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
-          <ShieldAlert className="text-amber-500 mb-6" size={48} />
-          <h2 className="text-white font-bold text-lg">Initialisation de votre profil</h2>
-          <p className="text-slate-500 text-sm mt-3">Merci de patienter pendant que nos serveurs préparent votre compte sécurisé.</p>
-          <button onClick={() => window.location.reload()} className="mt-8 px-6 py-3 bg-slate-800 rounded-xl text-white font-bold flex items-center space-x-2">
+        <div className="h-screen w-full bg-slate-900 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+          <ShieldAlert className={`mb-6 ${authError === 'PROFILE_FORBIDDEN' ? 'text-red-500' : 'text-amber-500'}`} size={48} />
+          <h2 className="text-white font-bold text-lg">
+            {authError === 'PROFILE_FORBIDDEN' ? 'Accès Restreint' : 'Initialisation de votre profil'}
+          </h2>
+          <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+            {authError === 'PROFILE_FORBIDDEN' 
+              ? 'Votre session a expiré ou vos droits ont été réinitialisés pour votre sécurité.' 
+              : 'Merci de patienter pendant que nos serveurs préparent votre compte sécurisé.'}
+          </p>
+          <button 
+            onClick={handleSystemRefresh} 
+            className="mt-8 px-6 py-3 bg-slate-800 rounded-xl text-white font-bold flex items-center space-x-2 border border-slate-700 active:scale-95 transition-transform shadow-xl"
+          >
             <RefreshCw size={18} /> <span>ACTUALISER</span>
           </button>
         </div>
       );
   }
 
-  // Navigation Logic
   const handleTabChange = (tab: ExtendedTabView) => {
     setCurrentTab(tab);
   };
@@ -187,7 +198,6 @@ function App() {
         ) : (
           <>
             <div className="flex-1 overflow-y-auto no-scrollbar">
-              {/* Shortcut to Admin for Demo Purpose */}
               {currentTab === 'home' && currentUser?.isPremium && (
                 <button 
                     onClick={() => setCurrentTab('admin')}
