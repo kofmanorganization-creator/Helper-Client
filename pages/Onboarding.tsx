@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Smartphone, Loader2, AlertCircle, RefreshCw, Lock, CheckCircle2, Eye, EyeOff, XCircle, ArrowRight } from 'lucide-react';
 import { authService } from '../services/authService';
@@ -8,14 +7,19 @@ import Login from './Login';
 
 const SLIDES = [
     {
-        image: "https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?q=80&w=1200&auto=format&fit=crop",
+        image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0631513185.firebasestorage.app/o/ChatGPT%20Image%2020%20d%C3%A9c.%202025%2C%2012_05_40.png?alt=media&token=d6391a06-4319-4247-a52a-98c149adc67e",
         title: "Votre temps est précieux.",
         subtitle: "Confiez-nous vos tâches quotidiennes."
     },
     {
-        image: "https://images.unsplash.com/photo-1581578731117-104f2a417954?q=80&w=1200&auto=format&fit=crop",
+        image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0631513185.firebasestorage.app/o/ChatGPT%20Image%2020%20d%C3%A9c.%202025%2C%2012_04_01.png?alt=media&token=22e60904-e4f3-458d-9bf4-19ab82ccee77",
         title: "La qualité Helper.",
         subtitle: "Prestataires rigoureusement sélectionnés."
+    },
+    {
+        image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0631513185.firebasestorage.app/o/ChatGPT%20Image%2020%20d%C3%A9c.%202025%2C%2011_56_48.png?alt=media&token=ebe81073-4f7f-4acc-856d-7a5da7d400ee",
+        title: "L'excellence à domicile.",
+        subtitle: "Des services premium à portée de main."
     }
 ];
 

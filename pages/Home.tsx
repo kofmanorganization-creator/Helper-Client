@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { SERVICES_CATEGORIES } from '../constants';
+import { SERVICES_CATEGORIES, TOP_RATED_MAIDS } from '../constants';
 import { ServiceCategory, Booking, User } from '../types';
-import { Bell, Clock, Star, Shield, Search, X, Sparkles, TrendingUp, ArrowUpRight, ShieldCheck, Zap, CheckCircle } from 'lucide-react';
+import { Bell, Clock, ArrowUpRight, Crown, Star, Shield, Zap, CheckCircle2, TrendingUp, Sparkles, ArrowRight, Award, MapPin as MapPinIcon } from 'lucide-react';
 import { subscribeToUserBookings } from '../services/bookingService';
 
 interface HomeProps {
@@ -13,372 +13,301 @@ interface HomeProps {
 const POPULAR_SERVICES = [
   { 
     id: 'pop_1', 
-    name: 'Nettoyage Pro', 
-    price: 'dès 15.000F', 
+    name: 'Nettoyage Premium', 
+    price: '15.000F', 
     rating: '4.9', 
     image: 'https://images.unsplash.com/photo-1581578731117-104f2a417954?q=80&w=600&auto=format&fit=crop',
-    categoryId: 'cat_apart'
+    categoryId: 'cat_apart',
+    tag: 'Tendance'
   },
   { 
     id: 'pop_2', 
-    name: 'Réparation Clim', 
-    price: 'dès 10.000F', 
+    name: 'Électricité Express', 
+    price: '5.000F', 
     rating: '4.8', 
     image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=600&auto=format&fit=crop',
-    categoryId: 'cat_bureau'
+    categoryId: 'cat_elec',
+    tag: 'Rapide'
   },
   { 
     id: 'pop_3', 
-    name: 'Chef à domicile', 
+    name: 'Cuisinier Pro', 
     price: 'Sur devis', 
     rating: '5.0', 
     image: 'https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=600&auto=format&fit=crop',
-    categoryId: 'cat_villa'
-  },
-  { 
-    id: 'pop_4', 
-    name: 'Soutien Scolaire', 
-    price: 'dès 7.500F/h', 
-    rating: '4.7', 
-    image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop',
-    categoryId: 'cat_cours'
+    categoryId: 'cat_helper_pro',
+    tag: 'Elite'
   },
 ];
 
 const Home: React.FC<HomeProps> = ({ currentUser, onStartNewBooking }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
 
-  // Filter for search bar
-  const filteredServices = SERVICES_CATEGORIES.filter(category => 
-    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Filter for home grid (Limit to first 4 for cleanliness)
-  const homeGridServices = SERVICES_CATEGORIES.slice(0, 4);
+  const expressServices = SERVICES_CATEGORIES.filter(c => !c.isPremium).slice(0, 6);
 
   useEffect(() => {
-    // Subscribe to real-time bookings
     const unsubscribe = subscribeToUserBookings((bookings) => {
-      const active = bookings.find(b => ['assigned', 'arrived', 'in_progress'].includes(b.status));
+      const active = bookings.find(b => ['assigned', 'arrived', 'in_progress', 'searching', 'pending_payment'].includes(b.status));
       setActiveBooking(active || null);
     });
+    return () => unsubscribe();
+  }, []);
 
-    // Handle clicks outside search suggestions
-    function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      unsubscribe();
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [wrapperRef]);
-
-  const handleSelectService = (category: ServiceCategory) => {
-    setSearchTerm(category.name);
-    setShowSuggestions(false);
-    onStartNewBooking(category);
-  };
-
-  const handlePopularClick = (categoryId: string) => {
-      const category = SERVICES_CATEGORIES.find(c => c.id === categoryId);
-      if (category) onStartNewBooking(category);
-  }
-
-  const handleClearSearch = () => {
-    setSearchTerm('');
-    setShowSuggestions(false);
-  };
-
-  const handleMoreServices = () => {
-      // Calls startNewBooking without a category to open the Wizard at Step 1 (Service Hub)
-      onStartNewBooking();
-  }
-
-  const ActiveBookingCard = () => (
-    <div className="col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5 backdrop-blur-md">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2 text-yellow-500">
-          <Clock size={16} className="animate-pulse" />
-          <span className="text-xs font-bold uppercase tracking-wider">En cours</span>
-        </div>
-        <span className="text-xs text-slate-500">
-          {activeBooking?.scheduledAt.toDate().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-      <div className="flex items-center space-x-4">
-        <div className="w-10 h-10 rounded-xl bg-slate-700/50 flex items-center justify-center text-xl">
-          {SERVICES_CATEGORIES.find(c => c.name === activeBooking?.serviceName)?.icon || '✨'}
-        </div>
-        <div>
-          <h3 className="font-bold text-white">{activeBooking?.serviceName}</h3>
-          <p className="text-xs text-slate-400">Prestataire: <span className="text-slate-200">{activeBooking?.provider?.name || 'En recherche...'}</span></p>
-        </div>
-      </div>
-      <div className="mt-4 w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-         <div className="bg-yellow-500 h-full w-2/3 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.5)]"></div>
-      </div>
-    </div>
-  );
-
-  const NoActiveBookingCard = () => (
-     <div className="col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5 backdrop-blur-md text-center">
-        <p className="text-sm font-medium text-slate-300">Aucune mission en cours.</p>
-        <p className="text-xs text-slate-500 mt-1">Réservez un service pour le voir ici.</p>
-     </div>
-  );
-
-  if (!currentUser) {
-    return null; // or a loading spinner
-  }
+  if (!currentUser) return null;
 
   return (
-    <div className="animate-fade-in pb-32 space-y-8 p-6">
+    <div className="animate-fade-in pb-32 space-y-8 p-6 aurora-background min-h-screen">
       
-      {/* Header */}
+      {/* Header Premium */}
       <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center space-x-3">
-          <div className="relative group cursor-pointer">
+        <div className="flex items-center space-x-4">
+          <div className="relative group">
             <div className="absolute inset-0 bg-primary-500 rounded-full blur opacity-40 group-hover:opacity-60 transition-opacity"></div>
-            <img 
-              src={currentUser?.photoUrl} 
-              alt="Profile" 
-              className="relative w-12 h-12 rounded-full object-cover border-2 border-slate-800" 
-            />
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900"></span>
+            <img src={currentUser?.photoUrl} alt="Profile" className="relative w-14 h-14 rounded-full object-cover border-2 border-slate-800" />
+            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-slate-900 shadow-sm"></span>
           </div>
           <div>
-            <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Bienvenue</p>
-            <h1 className="text-xl font-bold text-white">{currentUser?.firstName}</h1>
+            <p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] font-black">Helper Client</p>
+            <h1 className="text-2xl font-black text-white tracking-tight">{currentUser?.firstName}</h1>
           </div>
         </div>
-        <button className="relative w-10 h-10 rounded-full bg-slate-800/50 border border-slate-700 flex items-center justify-center hover:bg-slate-700/50 transition-colors">
-          <Bell size={20} className="text-slate-300" />
-          <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+        <button className="w-12 h-12 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center relative backdrop-blur-md">
+          <Bell size={22} className="text-slate-300" />
+          <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full border-2 border-slate-900"></span>
         </button>
       </div>
 
-      {/* Title & Search Section */}
-      <div className="space-y-6">
-        <div className="relative">
-            <div className="absolute -top-6 -left-6 w-24 h-24 bg-primary-500/20 rounded-full blur-2xl pointer-events-none"></div>
-            <div className="relative z-10">
-                <div className="flex items-center space-x-2 mb-2">
-                    <span className="p-1.5 rounded-lg bg-primary-500/10 text-primary-400">
-                    <Sparkles size={16} />
-                    </span>
-                    <span className="text-primary-400 text-xs font-bold tracking-wider uppercase">Nouvelle Mission</span>
-                </div>
-                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tight">
-                    Quel service<br/>recherchez-vous ?
-                </h1>
-            </div>
-        </div>
-
-        {/* Search Bar & Suggestions */}
-        <div className="relative z-20" ref={wrapperRef}>
-            <div className="relative group">
-            <div className="absolute inset-0 bg-primary-500/5 rounded-2xl blur-md group-focus-within:bg-primary-500/10 transition-colors"></div>
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-primary-400 transition-colors" size={20} />
-            
-            <input
-                type="text"
-                placeholder="Rechercher (ex: Plomberie, Gaz...)"
-                value={searchTerm}
-                onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setShowSuggestions(true);
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                className="relative w-full bg-slate-800/90 border border-slate-700/50 rounded-2xl py-4 pl-12 pr-10 text-white placeholder-slate-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 outline-none backdrop-blur-md transition-all z-10"
-            />
-            
-            {searchTerm && (
-                <button 
-                onClick={handleClearSearch}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white z-20 transition-colors"
-                >
-                <X size={18} />
-                </button>
-            )}
-
-            {/* Suggestions Dropdown */}
-            {showSuggestions && searchTerm.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-30 animate-fade-in">
-                {filteredServices.length > 0 ? (
-                    <ul className="max-h-60 overflow-y-auto no-scrollbar">
-                    {filteredServices.map((category) => (
-                        <li key={category.id}>
-                        <button
-                            onClick={() => handleSelectService(category)}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-700/50 flex items-center space-x-3 transition-colors group border-b border-slate-700/50 last:border-0"
-                        >
-                            <span className="text-xl group-hover:scale-110 transition-transform">{category.icon}</span>
-                            <div>
-                            <p className="text-sm font-bold text-white group-hover:text-primary-400 transition-colors">
-                                {category.name}
-                            </p>
-                            <p className="text-xs text-slate-500 truncate max-w-[200px]">
-                                {category.description}
-                            </p>
-                            </div>
-                            <ArrowUpRight size={14} className="ml-auto text-slate-600 group-hover:text-primary-400 opacity-0 group-hover:opacity-100 transition-all" />
-                        </button>
-                        </li>
-                    ))}
-                    </ul>
-                ) : (
-                    <div className="p-4 text-center text-slate-500 text-sm">
-                    Aucun résultat pour "{searchTerm}"
-                    </div>
-                )}
-                </div>
-            )}
-            </div>
-        </div>
-      </div>
-
-      {/* Services les plus demandés (Carousel) */}
+      {/* Section Vedette Immersive */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-1">
-            <h2 className="text-white font-bold text-lg flex items-center">
-                <TrendingUp size={18} className="mr-2 text-primary-400" />
-                Populaires
-            </h2>
-            <span className="text-xs text-primary-400 font-medium cursor-pointer">Voir tout</span>
+          <div className="flex items-center space-x-2">
+            <TrendingUp size={20} className="text-primary-400" />
+            <h2 className="text-white font-black text-xl tracking-tight">Services en Vedette</h2>
+          </div>
+          <span className="text-[10px] text-primary-400 font-bold uppercase tracking-widest bg-primary-500/10 px-3 py-1 rounded-full border border-primary-500/20">Elite 2024</span>
         </div>
         
-        <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar -mx-6 px-6 snap-x">
-            {POPULAR_SERVICES.map((service) => (
-                <button 
-                    key={service.id}
-                    onClick={() => handlePopularClick(service.categoryId)}
-                    className="relative group w-40 h-56 shrink-0 rounded-3xl overflow-hidden snap-start focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-transform active:scale-95"
-                >
-                    <img 
-                        src={service.image} 
-                        alt={service.name} 
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 group-hover:brightness-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent opacity-90 group-hover:opacity-80 transition-opacity"></div>
-                    
-                    <div className="absolute top-3 right-3 bg-slate-900/60 backdrop-blur-md px-2 py-1 rounded-full flex items-center border border-white/10">
-                        <Star size={10} className="text-yellow-400 mr-1 fill-yellow-400" />
-                        <span className="text-[10px] font-bold text-white">{service.rating}</span>
-                    </div>
+        <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-4 px-1 snap-x">
+          {POPULAR_SERVICES.map((service) => (
+            <button 
+              key={service.id}
+              onClick={() => {
+                const cat = SERVICES_CATEGORIES.find(c => c.id === service.categoryId);
+                if (cat) onStartNewBooking(cat);
+              }}
+              className="flex-shrink-0 w-52 h-80 relative rounded-[2.5rem] overflow-hidden snap-start active:scale-95 transition-all group shadow-2xl"
+            >
+              <img src={service.image} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={service.name} />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-slate-900/90 group-hover:to-black/80 transition-all duration-500"></div>
+              
+              <div className="absolute top-5 left-5">
+                <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-3 py-1 rounded-full">
+                  <span className="text-[9px] font-black text-white uppercase tracking-widest">{service.tag}</span>
+                </div>
+              </div>
 
-                    <div className="absolute bottom-0 left-0 right-0 p-4 text-left transform translate-y-0 transition-transform group-hover:-translate-y-1">
-                        <h3 className="text-white font-bold text-lg leading-tight mb-1 drop-shadow-md">{service.name}</h3>
-                        <p className="text-primary-300 text-xs font-semibold">{service.price}</p>
-                    </div>
+              <div className="absolute top-5 right-5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-xl flex items-center space-x-1 border border-white/10">
+                <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                <span className="text-[10px] font-black text-white">{service.rating}</span>
+              </div>
 
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
-                </button>
-            ))}
+              <div className="absolute bottom-0 left-0 right-0 p-6 text-left transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+                <p className="text-primary-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{service.price}</p>
+                <h3 className="text-white font-black text-lg leading-tight tracking-tight drop-shadow-lg">{service.name}</h3>
+                
+                <div className="mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                  <span className="text-[10px] text-slate-300 font-bold">Réserver</span>
+                  <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white shadow-lg">
+                    <ArrowUpRight size={16} />
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+          
+          <button onClick={() => onStartNewBooking()} className="flex-shrink-0 w-52 h-80 rounded-[2.5rem] bg-slate-800/20 border-2 border-dashed border-slate-700/50 flex flex-col items-center justify-center space-y-3 active:scale-95 transition-all group">
+            <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 group-hover:bg-primary-500 group-hover:text-white transition-colors duration-500">
+               <ArrowUpRight size={28} />
+            </div>
+            <span className="text-xs font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300 transition-colors">Découvrir plus</span>
+          </button>
         </div>
       </div>
 
-      {/* Categories Grid (Top 4 only) */}
+      {/* Bannière Helper Pro - Le Produit Phare */}
+      <button 
+        onClick={() => {
+          const cat = SERVICES_CATEGORIES.find(c => c.id === 'cat_helper_pro');
+          if (cat) onStartNewBooking(cat);
+        }}
+        className="relative w-full overflow-hidden rounded-[2.5rem] p-8 text-left group transition-all duration-700 active:scale-95 shadow-2xl"
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-primary-700 to-primary-900 group-hover:scale-110 transition-transform duration-1000"></div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+        
+        <div className="relative z-10 space-y-4">
+            <div className="bg-white/20 backdrop-blur-xl px-4 py-1.5 rounded-full border border-white/30 flex items-center space-x-2 w-fit">
+                <Crown size={14} className="text-amber-300 fill-amber-300" />
+                <span className="text-[11px] font-black text-white uppercase tracking-[0.2em]">Exclusivité Helper Pro</span>
+            </div>
+            
+            <h2 className="text-3xl font-black text-white leading-[1.1] tracking-tighter">Votre Femme de maison<br/>certifiée & garantie</h2>
+            <p className="text-primary-100/80 text-xs font-medium uppercase tracking-wider">Paiement Mensuel • Remplacement 48h</p>
+
+            <div className="flex -space-x-3 pt-2">
+                {[1,2,3,4].map(i => (
+                    <img key={i} src={`https://i.pravatar.cc/100?u=pro_woman_${i}`} className="w-10 h-10 rounded-2xl border-2 border-primary-700 object-cover shadow-xl" alt="Pro" />
+                ))}
+                <div className="w-10 h-10 rounded-2xl border-2 border-primary-700 bg-primary-800 flex items-center justify-center text-[10px] font-black text-white">+25</div>
+            </div>
+        </div>
+      </button>
+
+      {/* Section Helpers d'Élite (Fiches Profils Dynamiques) */}
+      <div className="space-y-4 mt-8">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center space-x-2">
+            <Award size={20} className="text-amber-500" />
+            <h2 className="text-white font-black text-xl tracking-tight">Nos Helpers d'Élite</h2>
+          </div>
+          <div className="flex items-center bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
+             <Star size={10} className="text-amber-500 fill-amber-500 mr-1.5" />
+             <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Mieux notées</span>
+          </div>
+        </div>
+
+        <div className="flex space-x-5 overflow-x-auto no-scrollbar pb-6 px-1 snap-x scroll-smooth">
+          {TOP_RATED_MAIDS.map((maid) => (
+            <div 
+              key={maid.id}
+              className="flex-shrink-0 w-48 h-72 relative rounded-[2.5rem] overflow-hidden snap-start active:scale-95 transition-all shadow-xl border border-slate-700/50 group"
+            >
+              <img src={maid.photoUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={maid.firstName} />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/20 to-transparent"></div>
+              
+              {/* Badge Certifié */}
+              <div className="absolute top-4 left-4 bg-amber-500/90 backdrop-blur-md rounded-xl p-2 shadow-lg border border-white/20">
+                <Shield size={16} className="text-white" />
+              </div>
+
+              {/* Infos Bulle Inférieure */}
+              <div className="absolute bottom-0 left-0 right-0 p-5 space-y-2">
+                <div className="flex items-center justify-between">
+                   <h4 className="text-white font-black text-lg tracking-tight">{maid.firstName}</h4>
+                   <div className="flex items-center space-x-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border border-white/10">
+                      <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                      <span className="text-[10px] font-black text-white">{maid.rating}</span>
+                   </div>
+                </div>
+                
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center text-[9px] text-slate-200 font-bold uppercase tracking-widest">
+                     <Clock size={12} className="mr-1.5 text-primary-400" /> {maid.experience} exp.
+                  </div>
+                  <div className="flex items-center text-[9px] text-slate-200 font-bold uppercase tracking-widest">
+                     <MapPinIcon size={12} className="mr-1.5 text-primary-400" /> {maid.commune}
+                  </div>
+                </div>
+
+                <div className="pt-3">
+                   <button 
+                    onClick={() => onStartNewBooking(SERVICES_CATEGORIES.find(c => c.id === 'cat_helper_pro'))}
+                    className="w-full py-2 bg-primary-600 hover:bg-primary-500 rounded-2xl text-[10px] font-black text-white uppercase tracking-widest transition-colors shadow-lg"
+                   >
+                     Réserver son Profil
+                   </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          <div className="flex-shrink-0 w-44 h-72 rounded-[2.5rem] bg-slate-800/20 border border-dashed border-slate-700/50 flex flex-col items-center justify-center p-8 text-center space-y-4">
+             <div className="p-4 bg-slate-800 rounded-2xl text-slate-500 group-hover:text-primary-400 transition-colors">
+                <Sparkles size={28} />
+             </div>
+             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">Prêt à rejoindre<br/>l'élite ?</p>
+             <button className="text-[10px] font-black text-primary-400 uppercase tracking-widest underline underline-offset-4">Devenir Helper</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Grille Express - Rectangles Verticaux Immersifs */}
       <div className="space-y-4">
-        <h2 className="text-white font-bold text-lg px-1">Catégories</h2>
-        <div className="grid grid-cols-2 gap-4">
-            {homeGridServices.map((category) => (
+        <div className="flex items-center justify-between px-1">
+            <h2 className="text-white font-black text-xl tracking-tight">Services Express</h2>
+            <button onClick={() => onStartNewBooking()} className="text-[10px] text-primary-400 font-black uppercase tracking-widest bg-primary-500/10 px-3 py-1.5 rounded-full border border-primary-500/20 flex items-center">
+              Voir tout <ArrowRight size={12} className="ml-1" />
+            </button>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+            {expressServices.map((category) => (
                 <button
                     key={category.id}
-                    onClick={() => handleSelectService(category)}
-                    className="group relative aspect-square flex flex-col items-start justify-between p-5 rounded-3xl bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600 backdrop-blur-xl overflow-hidden transition-all duration-300"
+                    onClick={() => onStartNewBooking(category)}
+                    className="relative h-48 rounded-[2.5rem] bg-slate-800/40 border border-slate-700/30 overflow-hidden transition-all group active:scale-95 shadow-lg flex flex-col items-center justify-center p-4 text-center"
                 >
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-50 transition-opacity duration-500" />
+                    {/* Fond décoratif immersif */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-900/20 to-slate-900/90 z-0"></div>
+                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-primary-500/10 rounded-full blur-xl group-hover:bg-primary-500/20 transition-colors"></div>
                     
-                    <div className="relative z-10 w-12 h-12 rounded-2xl bg-slate-900/50 flex items-center justify-center text-2xl shadow-inner text-slate-300 group-hover:scale-110 group-hover:text-white transition-transform duration-500">
-                        {category.icon}
+                    <div className="relative z-10 flex flex-col items-center space-y-4">
+                        <div className="w-14 h-14 rounded-2xl bg-slate-900/60 backdrop-blur-md flex items-center justify-center text-3xl shadow-xl border border-white/5 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500">
+                            {category.icon}
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="font-black text-white text-[10px] uppercase tracking-tighter leading-tight drop-shadow-md">{category.name}</h3>
+                            <div className="h-0.5 w-4 bg-primary-500 mx-auto rounded-full scale-0 group-hover:scale-100 transition-transform duration-500"></div>
+                        </div>
                     </div>
 
-                    <div className="relative z-10 text-left w-full mt-4">
-                        <h3 className="font-bold text-lg text-slate-200 group-hover:text-white leading-tight transition-colors duration-300">
-                            {category.name}
-                        </h3>
-                        <p className="text-xs text-slate-500 group-hover:text-slate-400 mt-1 line-clamp-2 transition-colors duration-300">
-                            {category.description}
-                        </p>
+                    <div className="absolute bottom-3 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10">
+                        <span className="text-[8px] font-black text-primary-400 uppercase tracking-widest">Réserver</span>
                     </div>
                 </button>
             ))}
         </div>
-        
-        {/* CTA Button - Triggers Service Hub */}
-        <button 
-            onClick={handleMoreServices}
-            className="w-full py-4 rounded-2xl border border-slate-700/50 bg-slate-800/30 text-primary-400 font-bold hover:bg-slate-800/80 hover:text-white hover:border-primary-500/50 transition-all duration-300 flex items-center justify-center group shadow-lg shadow-black/20 backdrop-blur-sm"
-        >
-            <span className="mr-2 transform group-hover:-translate-x-1 transition-transform opacity-70">&gt;&gt;</span>
-            <span className="tracking-wide">Plus de services</span>
-            <span className="ml-2 transform group-hover:translate-x-1 transition-transform opacity-70">&lt;&lt;</span>
-        </button>
       </div>
 
-      {/* Nos Engagements Section - Alignée horizontalement */}
-      <div className="space-y-4">
-        <div className="flex items-center space-x-2 px-1">
-            <CheckCircle size={18} className="text-green-400" />
-            <h2 className="text-white font-bold text-lg">Nos Engagements</h2>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
-                <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400 mb-2 group-hover:scale-110 transition-transform">
-                    <ShieldCheck size={20} />
+      {/* Engagements Helper */}
+      <div className="space-y-4 pt-4">
+        <h2 className="text-white font-black text-lg tracking-tight px-1 uppercase text-center opacity-40 tracking-[0.2em]">Nos Engagements</h2>
+        <div className="grid grid-cols-3 gap-4">
+            <div className="bg-slate-800/30 p-4 rounded-3xl text-center border border-slate-700/30 flex flex-col items-center space-y-2 backdrop-blur-sm">
+                <div className="p-2 bg-primary-500/10 rounded-xl text-primary-400">
+                    <Shield size={20} />
                 </div>
-                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Sécurité</h3>
-                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Helpers vérifiés & missions assurées.</p>
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter leading-tight">Sécurité<br/>Vérifiée</p>
             </div>
-
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
-                <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-400 mb-2 group-hover:scale-110 transition-transform">
-                    <Star size={20} />
-                </div>
-                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Qualité</h3>
-                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Standards stricts & satisfaction garantie.</p>
-            </div>
-
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-3 backdrop-blur-md flex flex-col items-center text-center transition-all hover:bg-slate-800/60 group">
-                <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center text-primary-400 mb-2 group-hover:scale-110 transition-transform">
+            <div className="bg-slate-800/30 p-4 rounded-3xl text-center border border-slate-700/30 flex flex-col items-center space-y-2 backdrop-blur-sm">
+                <div className="p-2 bg-green-500/10 rounded-xl text-green-400">
                     <Zap size={20} />
                 </div>
-                <h3 className="text-[10px] font-bold text-white uppercase tracking-tight">Rapidité</h3>
-                <p className="text-[8px] text-slate-500 mt-1 leading-tight">Intervention en moins de 60 min.</p>
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter leading-tight">Intervention<br/>Express</p>
+            </div>
+            <div className="bg-slate-800/30 p-4 rounded-3xl text-center border border-slate-700/30 flex flex-col items-center space-y-2 backdrop-blur-sm">
+                <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400">
+                    <CheckCircle2 size={20} />
+                </div>
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter leading-tight">Qualité<br/>Garantie</p>
             </div>
         </div>
       </div>
 
-      {/* Dashboard Widgets (Active Booking & Stats) */}
-      <div className="grid grid-cols-2 gap-4">
-        {activeBooking ? <ActiveBookingCard /> : <NoActiveBookingCard />}
+      {activeBooking && (
+          <div className="bg-primary-600/20 border border-primary-500/30 rounded-[2rem] p-5 backdrop-blur-md animate-fade-in flex items-center space-x-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary-500 flex items-center justify-center text-white shadow-lg">
+                  <Clock size={24} className="animate-pulse" />
+              </div>
+              <div className="flex-1">
+                  <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest">Mission en cours</p>
+                  <h3 className="font-bold text-white truncate">{activeBooking.serviceName}</h3>
+              </div>
+              <button className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-bold text-white transition-colors">Suivi</button>
+          </div>
+      )}
 
-        <div className="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5 backdrop-blur-md flex flex-col justify-between aspect-square">
-          <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400">
-            <Shield size={16} />
-          </div>
-          <div>
-            <span className="text-3xl font-bold text-white">100%</span>
-            <p className="text-xs text-slate-400">Sécurité</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5 backdrop-blur-md flex flex-col justify-between aspect-square">
-          <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
-             <Star size={16} />
-          </div>
-          <div>
-            <span className="text-3xl font-bold text-white">4.9</span>
-            <p className="text-xs text-slate-400">Avis</p>
-          </div>
-        </div>
+      <div className="text-center opacity-30 pt-8">
+        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Propelled by Koffmann AI</p>
       </div>
       
     </div>

@@ -1,7 +1,6 @@
 
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -13,6 +12,7 @@ import { acceptBooking } from "./bookings";
 import { createMission } from "./missions/createMission";
 import { completeRegistration } from "./auth";
 import { generateWelcomeMessage } from "./ai";
+import { dispatchMissionToProviders } from "./dispatchMission";
 
 export { 
     createSupportTicket, 
@@ -21,7 +21,8 @@ export {
     createMission,
     acceptBooking,
     completeRegistration,
-    generateWelcomeMessage
+    generateWelcomeMessage,
+    dispatchMissionToProviders
 };
 
 // Alias de compatibilité
@@ -54,20 +55,3 @@ export const onUserCreateTrigger = functions.region("europe-west1").auth.user().
     console.error(`[TRIGGER AUTH] Erreur:`, error);
   }
 });
-
-/**
- * TRIGGER FIRESTORE V2
- */
-export const onMissionCreated = onDocumentCreated(
-  {
-    region: "europe-west1",
-    document: "missions/{missionId}",
-  },
-  async (event) => {
-    const snap = event.data;
-    if (!snap) return;
-    const mission = snap.data();
-    if (mission.status !== 'searching') return;
-    console.log(`[Matching] Nouvelle mission : ${event.params.missionId}`);
-  }
-);

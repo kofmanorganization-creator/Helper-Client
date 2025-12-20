@@ -3,17 +3,43 @@ import { Timestamp } from 'firebase/firestore';
 
 export type FirestoreTimestamp = Timestamp;
 
+export interface Message {
+  id: string;
+  senderId: string;
+  text: string;
+  timestamp: Date | FirestoreTimestamp;
+  isRead: boolean;
+}
+
+export interface ChatSession {
+  id: string;
+  providerId: string;
+  providerName: string;
+  providerAvatar?: string;
+  lastMessage: string;
+  lastMessageTime: Date;
+  unreadCount: number;
+  isOnline: boolean;
+}
+
 export type ServiceCategory = {
   id: string;
   name: string;
   description: string;
   icon: string;
+  isPremium?: boolean;
 };
 
 export type PricingRule = {
-  type: 'fixed' | 'surface' | 'level' | 'recurring';
+  type: 'fixed' | 'surface' | 'level' | 'recurring' | 'helper_pro';
   unit?: 'm²' | 'monthly';
-  options: { key: string; label: string; price: number | 'quotation'; thresholds?: number[] }[];
+  options: { 
+    key: string; 
+    label: string; 
+    price: number | 'quotation'; 
+    thresholds?: number[];
+    extras?: { key: string; label: string; price: number }[];
+  }[];
 };
 
 export type ServicePricing = {
@@ -26,6 +52,7 @@ export type BookingState = {
   serviceCategory: ServiceCategory | null;
   pricingRule: PricingRule | null;
   selectedVariantKey: string | null;
+  selectedExtras: string[];
   customQuantity: number | null;
   surfaceArea: number;
   frequency: string | null;
@@ -45,7 +72,38 @@ export interface User {
   email: string;
   photoUrl: string;
   isPremium: boolean;
+  role?: 'client' | 'admin' | 'provider';
   commune?: string;
+}
+
+// --- HELPER PRO SPECIFIC ---
+
+export interface HelperProWorker {
+  id: string;
+  firstName: string;
+  lastName: string;
+  photoUrl: string;
+  commune: string;
+  status: 'pending' | 'pre_approved' | 'certified' | 'rejected';
+  scoreMoralite: number;
+  scorePsy: number;
+  phone: string;
+  certifiedAt?: FirestoreTimestamp;
+}
+
+export interface HelperProContract {
+  id: string;
+  clientId: string;
+  clientName: string;
+  workerId: string | null;
+  workerName: string | null;
+  serviceKey: string;
+  extras: string[];
+  monthlyPrice: number;
+  commissionPct: number;
+  status: 'pending' | 'active' | 'replaced' | 'terminated';
+  createdAt: FirestoreTimestamp;
+  nextPaymentAt: FirestoreTimestamp;
 }
 
 export type MissionStatus = 
@@ -93,23 +151,7 @@ export interface Booking {
   provider?: Provider | null;
   address: string;
   serviceCategoryName?: string;
-}
-
-export interface Message {
-  id: string;
-  senderId: string;
-  text: string;
-  timestamp: Date | FirestoreTimestamp;
-  isRead: boolean;
-}
-
-export interface ChatSession {
-  id: string;
-  providerId: string;
-  providerName: string;
-  providerAvatar?: string;
-  lastMessage: string;
-  lastMessageTime: Date;
-  unreadCount: number;
-  isOnline: boolean;
+  isRecurring?: boolean;
+  extras?: string[];
+  pricingType?: 'hourly' | 'monthly';
 }

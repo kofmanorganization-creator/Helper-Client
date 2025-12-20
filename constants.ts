@@ -1,5 +1,5 @@
 
-import { ServiceCategory, ServicePricing, User } from './types';
+import { ServiceCategory, ServicePricing, User, HelperProWorker } from './types';
 
 export const COMMISSION_RATE = 0.25;
 
@@ -12,7 +12,57 @@ export const MOCK_USER: User = {
   isPremium: true,
 };
 
+export interface FeaturedWorker extends Partial<HelperProWorker> {
+    rating: number;
+    experience: string;
+    specialty: string;
+}
+
+export const TOP_RATED_MAIDS: FeaturedWorker[] = [
+    {
+        id: 'maid_1',
+        firstName: 'Mariam',
+        lastName: 'K.',
+        photoUrl: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?q=80&w=400&auto=format&fit=crop',
+        commune: 'Cocody',
+        rating: 4.9,
+        experience: '5 ans',
+        specialty: 'Cuisine & Ménage'
+    },
+    {
+        id: 'maid_2',
+        firstName: 'Awa',
+        lastName: 'D.',
+        photoUrl: 'https://images.unsplash.com/photo-1589156229687-496a31ad1d1f?q=80&w=400&auto=format&fit=crop',
+        commune: 'Marcory',
+        rating: 4.8,
+        experience: '3 ans',
+        specialty: 'Garde d\'enfants'
+    },
+    {
+        id: 'maid_3',
+        firstName: 'Sali',
+        lastName: 'T.',
+        photoUrl: 'https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=400&auto=format&fit=crop',
+        commune: 'Riviera',
+        rating: 5.0,
+        experience: '7 ans',
+        specialty: 'Repassage Expert'
+    },
+    {
+        id: 'maid_4',
+        firstName: 'Binta',
+        lastName: 'S.',
+        photoUrl: 'https://images.unsplash.com/photo-1523824921871-d6f1a15151f1?q=80&w=400&auto=format&fit=crop',
+        commune: 'Plateau',
+        rating: 4.9,
+        experience: '4 ans',
+        specialty: 'Grand Nettoyage'
+    }
+];
+
 export const SERVICES_CATEGORIES: ServiceCategory[] = [
+  { id: 'cat_helper_pro', name: 'Helper Pro', description: 'Maids certifiées & garanties', icon: '⭐', isPremium: true },
   { id: 'cat_apart', name: 'Appartement', description: 'Nettoyage complet', icon: '🏢' },
   { id: 'cat_villa', name: 'Villa', description: 'Nettoyage surface', icon: '🏡' },
   { id: 'cat_bureau', name: 'Bureau', description: 'Entretien pro', icon: '💼' },
@@ -28,6 +78,41 @@ export const SERVICES_CATEGORIES: ServiceCategory[] = [
 ];
 
 export const SERVICES_PRICING_RULES: ServicePricing[] = [
+  {
+    serviceCategoryId: 'cat_helper_pro',
+    rules: {
+      type: 'helper_pro',
+      unit: 'monthly',
+      options: [
+        { 
+          key: 'house_maintenance', 
+          label: 'Entretien maison', 
+          price: 45000,
+          extras: [
+            { key: 'child_care', label: 'Garde enfant', price: 10000 },
+            { key: 'cooking', label: 'Cuisine quotidienne', price: 15000 }
+          ]
+        },
+        { 
+          key: 'nanny_pro', 
+          label: 'Garde enfant', 
+          price: 40000,
+          extras: [
+            { key: 'cleaning_light', label: 'Ménage léger', price: 10000 },
+            { key: 'cooking_light', label: 'Cuisine simple', price: 15000 }
+          ]
+        },
+        { 
+          key: 'cook_pro', 
+          label: 'Cuisinier pro', 
+          price: 200000,
+          extras: [
+            { key: 'waiter', label: 'Service à table', price: 30000 }
+          ]
+        },
+      ],
+    },
+  },
   {
     serviceCategoryId: 'cat_apart',
     rules: {
@@ -109,63 +194,6 @@ export const SERVICES_PRICING_RULES: ServicePricing[] = [
         { key: 'diag', label: 'Diagnostic / Devis', price: 5000 },
         { key: 'panne', label: 'Recherche Panne', price: 15000 },
         { key: 'prise', label: 'Installation Prise/Interrupteur', price: 7500 },
-      ],
-    },
-  },
-  {
-    serviceCategoryId: 'cat_jardin',
-    rules: {
-      type: 'surface',
-      unit: 'm²',
-      options: [
-        { key: 'small', label: 'Petit Jardin (<50m²)', price: 15000 },
-        { key: 'medium', label: 'Moyen Jardin (50-150m²)', price: 30000 },
-        { key: 'large', label: 'Grand Jardin (>150m²)', price: 50000 },
-      ],
-    },
-  },
-  {
-    serviceCategoryId: 'cat_brico',
-    rules: {
-      type: 'fixed',
-      options: [
-        { key: 'heure', label: '1 Heure de main d\'oeuvre', price: 5000 },
-        { key: 'demi', label: 'Demi-journée (4h)', price: 18000 },
-        { key: 'jour', label: 'Journée complète (8h)', price: 32000 },
-      ],
-    },
-  },
-  {
-    serviceCategoryId: 'cat_peinture',
-    rules: {
-      type: 'surface', 
-      unit: 'm²',
-      options: [
-        { key: 'mur', label: 'Mur Simple (au m²)', price: 2500 },
-        { key: 'plafond', label: 'Plafond (au m²)', price: 3500 },
-        { key: 'complet', label: 'Pièce complète (au sol)', price: 5000 },
-      ],
-    },
-  },
-  {
-    serviceCategoryId: 'cat_demenagement',
-    rules: {
-      type: 'fixed',
-      options: [
-        { key: 'manutention', label: 'Aide manutention (4h)', price: 20000 },
-        { key: 'camion_s', label: 'Camionette + Chauffeur', price: 40000 },
-        { key: 'camion_l', label: 'Camion + 2 Déménageurs', price: 80000 },
-      ],
-    },
-  },
-  {
-    serviceCategoryId: 'cat_livraison',
-    rules: {
-      type: 'fixed',
-      options: [
-        { key: 'z1', label: 'Zone 1 (Même commune)', price: 1500 },
-        { key: 'z2', label: 'Zone 2 (Abidjan)', price: 3000 },
-        { key: 'z3', label: 'Zone 3 (Grand Abidjan)', price: 5000 },
       ],
     },
   },

@@ -14,7 +14,22 @@ export class PricingEngineFirebase {
     let basePrice: number | 'quotation' | null = null;
     const rules = await this.getPricingRuleForCategory(state.serviceCategory.id);
 
-    if (state.selectedVariantKey === 'custom' && state.customQuantity) {
+    if (!rules) return null;
+
+    if (rules.type === 'helper_pro' && state.selectedVariantKey) {
+        const option = rules.options.find(opt => opt.key === state.selectedVariantKey);
+        if (option && typeof option.price === 'number') {
+            basePrice = option.price;
+            // Somme des extras
+            if (state.selectedExtras && option.extras) {
+                const extrasTotal = state.selectedExtras.reduce((sum, extraKey) => {
+                    const extra = option.extras?.find(e => e.key === extraKey);
+                    return sum + (extra?.price || 0);
+                }, 0);
+                basePrice += extrasTotal;
+            }
+        }
+    } else if (state.selectedVariantKey === 'custom' && state.customQuantity) {
         if (state.serviceCategory.id === 'cat_apart') {
             basePrice = 45000 + (Math.max(0, state.customQuantity - 4) * 15000);
         } else {
@@ -33,7 +48,7 @@ export class PricingEngineFirebase {
         }
     }
 
-    if (typeof basePrice === 'number' && state.scheduledDateTime) {
+    if (typeof basePrice === 'number' && state.scheduledDateTime && rules.type !== 'helper_pro') {
         if (state.scheduledDateTime.getHours() >= 18) {
             basePrice += 5000;
         }
